@@ -664,13 +664,14 @@ ipcMain.handle('updater:get-version', () => {
 ipcMain.handle('updater:check', async () => {
   if (!GITHUB_OWNER) return { hasUpdate: false }
   try {
-    const url = `https://raw.githubusercontent.com/${GITHUB_OWNER}/${GITHUB_REPO}/main/version.json`
-    const res = await fetch(url, { headers: { 'Cache-Control': 'no-cache' } })
+    const url = `https://raw.githubusercontent.com/${GITHUB_OWNER}/${GITHUB_REPO}/main/version.json?t=${Date.now()}`
+    const res = await fetch(url, { cache: 'no-store', headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' } })
     if (!res.ok) return { hasUpdate: false }
     const remote = await res.json()
     const local = getLocalVersion()
     const hasUpdate = compareVersions(remote.version, local.version) > 0
-    return { hasUpdate, newVersion: remote.version, changelog: remote.changelog || '' }
+    const changes = (remote.history && remote.history[0]?.changes) || (remote.changelog ? [remote.changelog] : [])
+    return { hasUpdate, newVersion: remote.version, changes }
   } catch {
     return { hasUpdate: false }
   }
