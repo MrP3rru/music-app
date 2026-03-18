@@ -4,6 +4,7 @@ import AudioMotionAnalyzer from 'audiomotion-analyzer'
 import ElectricBorder from './ElectricBorder'
 import { useListenTogether } from './useListenTogether'
 import UpdateModal from './UpdateModal'
+import VersionPopup from './VersionPopup'
 import './App.css'
 
 const genres = [
@@ -601,10 +602,14 @@ const IDLE_BARS = Array.from({ length: 48 }, (_, i) => {
 
 function App() {
   const [appVersion, setAppVersion] = useState('')
+  const [versionHistory, setVersionHistory] = useState([])
+  const [versionPopupOpen, setVersionPopupOpen] = useState(false)
   const [updateInfo, setUpdateInfo] = useState(null) // null | { hasUpdate, newVersion, changelog }
 
   useEffect(() => {
-    window.playerBridge?.getVersion?.().then(v => { if (v) setAppVersion(v) })
+    window.playerBridge?.getVersion?.().then(v => {
+      if (v?.version) { setAppVersion(v.version); setVersionHistory(v.history || []) }
+    })
     // Sprawdź aktualizacje 3s po starcie (nie blokuj ładowania UI)
     const t = setTimeout(() => {
       window.playerBridge?.checkUpdate?.().then(info => {
@@ -3048,8 +3053,14 @@ function App() {
       />
     )}
 
+    {versionPopupOpen && (
+      <VersionPopup version={appVersion} history={versionHistory} onClose={() => setVersionPopupOpen(false)} />
+    )}
+
     {appVersion && (
-      <span className="app-version-badge">v{appVersion}</span>
+      <button className="app-version-badge" onClick={() => setVersionPopupOpen(true)}>
+        v{appVersion}
+      </button>
     )}
     </>
   )

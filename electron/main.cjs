@@ -657,7 +657,8 @@ function compareVersions(a, b) {
 }
 
 ipcMain.handle('updater:get-version', () => {
-  return getLocalVersion().version
+  const v = getLocalVersion()
+  return { version: v.version, history: v.history || [] }
 })
 
 ipcMain.handle('updater:check', async () => {
