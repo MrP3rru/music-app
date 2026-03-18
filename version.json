@@ -1,7 +1,14 @@
 {
-  "version": "1.6.12",
+  "version": "1.6.13",
   "changelog": "Poprawki badge wersji i historia wersji",
   "history": [
+    {
+      "version": "1.6.13",
+      "date": "2026-03-18",
+      "changes": [
+        "Poprawka dla stacji radiowych (wtg_)"
+      ]
+    },
     {
       "version": "1.6.12",
       "date": "2026-03-18",

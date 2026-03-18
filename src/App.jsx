@@ -2694,7 +2694,7 @@ function App() {
                   className={`library-item${selected ? ' active' : ''}${canSuggest ? ' with-suggest' : ''}`}
                   onClick={() => {
                     if (mode === 'radio') {
-                      if (!checkPerm('canAdd')) return
+                      if (!checkPerm('canSkip') && !checkPerm('canAdd')) return
                       selectStation(item)
                       if (inSession) notifyAction('stationChange', { id: item.id, name: item.name, url: item.url, country: item.country, countrycode: item.countrycode, favicon: item.favicon, tags: item.tags, codec: item.codec, bitrate: item.bitrate, lastSong: item.lastSong ?? '' })
                       return
