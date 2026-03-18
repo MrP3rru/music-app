@@ -17,6 +17,7 @@ echo  [VER] Nowa wersja: %NEW_VER%
 
 git add .
 git commit -m "v%NEW_VER% — %MSG%"
+git pull --rebase origin main
 git push --set-upstream origin main
 
 echo.
