@@ -2193,12 +2193,12 @@
 /* ── Version badge ───────────────────────────────── */
 .app-version-badge {
   position: fixed;
-  bottom: 0px;
-  right: 0px;
+  bottom: 5px;
+  right: 6px;
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.7);
-  background: rgba(255, 255, 255, 0.103);
-  border: 1px solid rgba(0, 255, 242, 0.349);
+  color: rgba(255, 255, 255, 0.507);
+  background: rgba(255, 255, 255, 0.068);
+  border: 1px solid rgba(0, 255, 242, 0.137);
   border-radius: 10px;
   padding: 2px 8px;
   cursor: pointer;
@@ -2210,7 +2210,7 @@
 
 .app-version-badge:hover {
   color: rgb(255, 255, 255);
-  background: rgba(11, 109, 221, 0.856);
+  background: rgba(146, 146, 146, 0.411);
 }
 
 /* ── Version history popup ───────────────────────── */

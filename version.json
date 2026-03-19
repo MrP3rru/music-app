@@ -1,7 +1,14 @@
 {
-  "version": "1.6.14",
+  "version": "1.6.15",
   "changelog": "Poprawki badge wersji i historia wersji",
   "history": [
+    {
+      "version": "1.6.15",
+      "date": "2026-03-19",
+      "changes": [
+        "Wprowadzona poprawka dla zmiany stacji radiowej w nowym wyszukiwaniu w trybie wtg_"
+      ]
+    },
     {
       "version": "1.6.14",
       "date": "2026-03-19",

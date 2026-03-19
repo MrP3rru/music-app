@@ -1919,7 +1919,9 @@ function App() {
   }
 
   function handleRgPick(rgStation) {
+    if (!checkPerm('canSkip') && !checkPerm('canAdd')) return
     selectStation(rgStation)
+    if (inSession) notifyAction('stationChange', { id: rgStation.id, name: rgStation.name, url: rgStation.url, country: rgStation.country ?? '', countrycode: rgStation.countryCode ?? '', favicon: rgStation.favicon ?? '', tags: rgStation.tags ?? '', codec: rgStation.codec ?? '', bitrate: rgStation.bitrate ?? 0, lastSong: rgStation.lastSong ?? '' })
   }
 
   function handleStationNext() {
