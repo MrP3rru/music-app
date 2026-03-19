@@ -197,7 +197,7 @@ export function useListenTogether({
             onRemoteModeChangeRef.current?.(payload.mode, true)
           }
           if (type === 'stationChange') {
-            if (!isHostRef.current) lastSyncedStationIdRef.current = payload.id
+if (!isHostRef.current) lastSyncedStationIdRef.current = payload.id
             onRemoteStationChangeRef.current?.(payload)
           }
           if (type === 'seek') {

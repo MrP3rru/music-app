@@ -128,6 +128,81 @@ const radioApiBases = [
 ]//zmianiam2
 
 const radioSearchEndpoint = '/json/stations/search'
+
+// Ręcznie zweryfikowane polskie stacje z działającymi streamami
+function _pl(id, name, tags, bitrate, urls, favicon = '', homepage = '', votes = 5000) {
+  return { id: `curated-${id}`, name, countryCode: 'PL', country: 'Poland', codec: 'MP3', bitrate, tags, favicon, homepage, votes, lastSong: '', streamCandidates: urls, url: urls[0] }
+}
+const CURATED_PL_STATIONS = [
+  // --- Główne ---
+  _pl('rmffm',     'RMF FM',                 'pop,hits,polskie',       128, ['https://rs9-krk2.rmfstream.pl/RMFFM48','https://rs6-krk2.rmfstream.pl/RMFFM48','http://188.165.12.72:8000/rmf_fm'], 'https://www.rmf.fm/favicon.ico', 'https://www.rmf.fm', 9999),
+  _pl('radiozet',  'Radio ZET',              'pop,hits,polskie',       128, ['https://n-4-6.dcs.redcdn.pl/sc/o2/Eurozet/live/audio.livx','https://n-1-6.dcs.redcdn.pl/sc/o2/Eurozet/live/audio.livx','http://91.121.179.221:8050'], 'https://www.radiozet.pl/favicon.ico', 'https://www.radiozet.pl', 9998),
+  _pl('trojka',    'Polskie Radio Trójka',   'polskie,public,rock',    96,  ['https://mp3.polskieradio.pl:8904/','http://stream.polskieradio.pl/program3','https://stream3.polskieradio.pl:8954/'], 'https://www.polskieradio.pl/favicon.ico', 'https://trojka.polskieradio.pl', 9000),
+  _pl('jedynka',   'Polskie Radio Jedynka',  'polskie,public,news',    96,  ['https://mp3.polskieradio.pl:8900/','http://stream.polskieradio.pl/program1','https://stream3.polskieradio.pl:8950/'], 'https://www.polskieradio.pl/favicon.ico', 'https://jedynka.polskieradio.pl', 8900),
+  _pl('dwojka',    'Polskie Radio Dwójka',   'polskie,public,classical',96, ['https://mp3.polskieradio.pl:8902/','http://stream.polskieradio.pl/program2','https://stream3.polskieradio.pl:8952/'], 'https://www.polskieradio.pl/favicon.ico', 'https://dwojka.polskieradio.pl', 8800),
+  _pl('czworka',   'Polskie Radio Czwórka',  'polskie,public,pop',     96,  ['https://mp3.polskieradio.pl:8906/','http://stream.polskieradio.pl/euro','https://stream3.polskieradio.pl:8956/'], 'https://www.polskieradio.pl/favicon.ico', 'https://czworka.polskieradio.pl', 8700),
+  _pl('tokfm',     'TOK FM',                 'polskie,news,talk',      128, ['https://radiostream.pl/tuba10-1.mp3'], 'https://www.tokfm.pl/favicon.ico', 'https://www.tokfm.pl', 8500),
+  _pl('antyradio', 'Antyradio',              'rock,polskie',           128, ['https://an03.cdn.eurozet.pl/ant-waw.mp3','https://an01.cdn.eurozet.pl/ant-waw.mp3'], 'https://www.antyradio.pl/favicon.ico', 'https://www.antyradio.pl', 8400),
+  _pl('maryja',    'Radio Maryja',           'polskie,religious',       48, ['https://usa12.fastcast4u.com/proxy/isnesllc?mp=/1','https://radiomaryja.fastcast4u.com/proxy/radiomaryja'], 'https://www.radiomaryja.pl/favicon.ico', 'https://www.radiomaryja.pl', 8300),
+  _pl('voxfm',     'VOX FM',                 'pop,polskie',            128, ['https://rs101-krk2.rmfstream.pl/VOXFM48','https://rs104-krk2.rmfstream.pl/VOXFM48'], '', 'https://www.voxfm.pl', 8200),
+  // --- RMF podkanały ---
+  _pl('rmfclassic',     'RMF Classic',           'classical,polskie',  48, ['https://rs201-krk-cyfrostat.rmfstream.pl/RMFCLASSIC48','http://188.165.12.72:8000/rmf_classic'], 'https://www.rmfclassic.pl/favicon.ico', 'https://www.rmfclassic.pl', 8600),
+  _pl('rmfmaxxx',       'RMF MAXXX',             'dance,polskie',      48, ['https://rs101-krk.rmfstream.pl/RMFMAXXX48','http://188.165.12.72:8000/rmf_club'], 'https://www.rmfmaxxx.pl/favicon.ico', 'https://www.rmfmaxxx.pl', 8100),
+  _pl('rmf-hiphop',     'RMF Hip Hop',           'hip-hop,rap',        48, ['http://188.165.12.72:8000/rmf_hip_hop'], '', 'https://www.rmf.fm', 6000),
+  _pl('rmf-rock',       'RMF Rock',              'rock',               48, ['http://188.165.12.72:8000/rmf_rock'], '', 'https://www.rmf.fm', 6000),
+  _pl('rmf-dance',      'RMF Dance',             'dance,electronic',   48, ['http://188.165.12.72:8000/rmf_dance'], '', 'https://www.rmf.fm', 6000),
+  _pl('rmf-80s',        'RMF 80s',               '80s,retro',          48, ['http://188.165.12.72:8000/rmf_80s'], '', 'https://www.rmf.fm', 5800),
+  _pl('rmf-90s',        'RMF 90s',               '90s,retro',          48, ['http://188.165.12.72:8000/rmf_90s'], '', 'https://www.rmf.fm', 5800),
+  _pl('rmf-gold',       'RMF Gold',              'oldies,polskie',     48, ['http://188.165.12.72:8000/rmf_gold'], '', 'https://www.rmf.fm', 5700),
+  _pl('rmf-chillout',   'RMF Chillout',          'chillout,ambient',   48, ['http://188.165.12.72:8000/rmf_chillout'], '', 'https://www.rmf.fm', 5600),
+  _pl('rmf-polskie',    'RMF Polskie Przeboje',  'polskie,pop',        48, ['http://188.165.12.72:8000/rmf_polskie_przeboje'], '', 'https://www.rmf.fm', 5500),
+  _pl('rmf-reggae',     'RMF Reggae',            'reggae',             48, ['http://188.165.12.72:8000/rmf_reggae'], '', 'https://www.rmf.fm', 5400),
+  _pl('rmf-blues',      'RMF Blues',             'blues',              48, ['http://188.165.12.72:8000/rmf_blues'], '', 'https://www.rmf.fm', 5300),
+  _pl('rmf-jazz',       'RMF Smooth Jazz',       'jazz',               48, ['http://188.165.12.72:8000/rmf_smooth_jazz'], '', 'https://www.rmf.fm', 5200),
+  _pl('rmf-baby',       'RMF Baby',              'dzieci,polskie',     48, ['http://188.165.12.72:8000/rmf_baby'], '', 'https://www.rmf.fm', 5100),
+  _pl('rmf-party',      'RMF Party',             'party,dance',        48, ['http://188.165.12.72:8000/rmf_party'], '', 'https://www.rmf.fm', 5000),
+  // --- ZET podkanały ---
+  _pl('zet-gold',       'Zet Gold',              'oldies,polskie',    128, ['http://zetgold-01.eurozet.pl:8000/'], '', 'https://www.radiozet.pl', 5800),
+  _pl('zet-dance',      'Zet Dance',             'dance,electronic',  128, ['http://zetdance-01.eurozet.pl:8000/'], '', 'https://www.radiozet.pl', 5700),
+  _pl('zet-rock',       'Zet Rock',              'rock',              128, ['http://zetrock-01.eurozet.pl:8000/'], '', 'https://www.radiozet.pl', 5600),
+  _pl('zet-polskie',    'Zet Polskie',           'polskie,pop',       128, ['http://zetpl-02.eurozet.pl:8100/'], '', 'https://www.radiozet.pl', 5500),
+  _pl('zet-slow',       'Zet Slow',              'ballads,polskie',   128, ['http://zet-slow-01.eurozet.pl:8200/'], '', 'https://www.radiozet.pl', 5400),
+  _pl('zet-party',      'Zet Party',             'party,hits',        128, ['http://zetparty-01.eurozet.pl:8100/'], '', 'https://www.radiozet.pl', 5300),
+  _pl('chillizet',      'Chilli ZET',            'pop,hits',          128, ['http://chillizetmp3-05.eurozet.pl:8400/'], '', 'https://www.radiozet.pl', 5200),
+  _pl('zet-chopin',     'Zet Chopin',            'classical,chopin',  128, ['http://zetchopin-02.eurozet.pl:8100/'], '', 'https://www.radiozet.pl', 5100),
+  _pl('zet-2000',       'Zet 2000',              '2000s,pop',         128, ['http://zet-2000-02.eurozet.pl:8100/'], '', 'https://www.radiozet.pl', 5000),
+  _pl('zet-soul',       'Zet Soul',              'soul,rnb',          128, ['http://zetsoul-02.eurozet.pl:8100/'], '', 'https://www.radiozet.pl', 4900),
+  _pl('zet-kids',       'Zet Kids',              'dzieci',            128, ['http://zetkids-02.eurozet.pl:8100/'], '', 'https://www.radiozet.pl', 4800),
+  // --- Eska ---
+  _pl('eskarock',       'Eska Rock',             'rock,polskie',      128, ['http://poznan5.radio.pionier.net.pl:8000/eskarock.mp3'], '', 'https://www.eskarock.pl', 6000),
+  // --- Internetowe / niszowe ---
+  _pl('radio357',       'Radio 357',             'pop,rock,polskie',  128, ['https://stream.radio357.pl','http://live.r357.eu','http://n16a-eu.rcs.revma.com/an1ugyygzk8uv'], '', 'https://radio357.pl', 9500),
+  _pl('meloradio',      'Meloradio',             'pop,ballads',       128, ['https://ml02.cdn.eurozet.pl/mel-wro.mp3','https://ml.cdn.eurozet.pl/mel-net.mp3','https://ml03.cdn.eurozet.pl/mel-poz.mp3'], '', 'https://www.meloradio.pl', 8000),
+  _pl('planetafm',      'Planeta FM',            'dance,clubbing',    128, ['http://planetamp3-01.eurozet.pl:8400/'], '', 'https://www.planetafm.pl', 7500),
+  _pl('zlotempl',       'Radio Złote Przeboje',  'polskie,oldies',    128, ['http://poznan5-6.radio.pionier.net.pl:8000/tuba9-1.mp3'], '', '', 7000),
+  // --- Polskastacja (tematyczne) ---
+  _pl('ps-party',       'Polskastacja Party',    'party,dance',       128, ['http://91.121.124.91:8000/ps-party'], '', 'https://www.polskastacja.pl', 6500),
+  _pl('ps-clubhits',    'Polskastacja Club Hits','clubbing,dance',    128, ['http://91.121.124.91:8000/ps-clubhits'], '', 'https://www.polskastacja.pl', 6400),
+  _pl('ps-house',       'Polskastacja House',    'house,electronic',  128, ['http://91.121.124.91:8000/ps-house'], '', 'https://www.polskastacja.pl', 6300),
+  _pl('ps-hiphop',      'Polskastacja Hip Hop',  'hip-hop,rap',       128, ['http://91.121.124.91:8000/ps-hiphop'], '', 'https://www.polskastacja.pl', 6200),
+  _pl('ps-rock',        'Polskastacja Rock',     'rock',              128, ['http://91.121.124.91:8000/ps-rock'], '', 'https://www.polskastacja.pl', 6100),
+  _pl('ps-polskie',     'Polskastacja Polskie',  'polskie,pop',       128, ['http://91.121.124.91:8000/ps-polskie'], '', 'https://www.polskastacja.pl', 6000),
+  _pl('ps-relax',       'Polskastacja Relax',    'chillout,ambient',  128, ['http://91.121.124.91:8000/ps-relax'], '', 'https://www.polskastacja.pl', 5900),
+  _pl('ps-decade80',    'Polskastacja Lata 80',  '80s,retro',         128, ['http://91.121.124.91:8000/ps-lata80'], '', 'https://www.polskastacja.pl', 5800),
+  _pl('ps-decade90',    'Polskastacja Lata 90',  '90s,retro',         128, ['http://91.121.124.91:8000/ps-lata90'], '', 'https://www.polskastacja.pl', 5700),
+  _pl('ps-metal',       'Polskastacja Metal',    'metal,heavy',       128, ['http://91.121.124.91:8000/ps-metal'], '', 'https://www.polskastacja.pl', 5600),
+  _pl('ps-jazz',        'Polskastacja Jazz',     'jazz',              128, ['http://91.121.124.91:8000/ps-jazz'], '', 'https://www.polskastacja.pl', 5500),
+  _pl('ps-classical',   'Polskastacja Klasyczna','classical',         128, ['http://91.121.124.91:8000/ps-klasyczna'], '', 'https://www.polskastacja.pl', 5400),
+  _pl('ps-reggae',      'Polskastacja Reggae',   'reggae',            128, ['http://91.121.124.91:8000/ps-reggae'], '', 'https://www.polskastacja.pl', 5300),
+  _pl('ps-disco',       'Polskastacja Disco',    'disco,dance',       128, ['http://91.121.124.91:8000/ps-disco'], '', 'https://www.polskastacja.pl', 5200),
+  _pl('ps-discopolo',   'Polskastacja Disco Polo','discopolo,polskie',128, ['http://91.121.124.91:8000/ps-discopolo'], '', 'https://www.polskastacja.pl', 5100),
+  // --- Regionalne ---
+  _pl('radiokrakow',    'Radio Kraków',          'polskie,regional',   96, ['http://stream4.nadaje.com:9681/radiokrakow-s3'], '', 'https://www.radiokrakow.pl', 5000),
+  _pl('radiolodz',      'Radio Łódź',            'polskie,regional',   96, ['https://stream.radiolodz.toya.cloud/RadioLodz-1.mp3'], '', '', 4900),
+  _pl('radiogdansk',    'Radio Gdańsk',          'polskie,regional',   96, ['http://stream.task.gda.pl:8443/rg1'], '', '', 4800),
+  _pl('radiopoznan',    'Radio Poznań',          'polskie,regional',   96, ['http://stream4.nadaje.com:8579/poznan'], '', '', 4700),
+  _pl('radiokampus',    'Radio Kampus',          'polskie,alternative',96, ['http://193.0.98.66:8002/'], '', '', 4600),
+]
 const failedImageUrls = new Set()
 const MIX_PATTERN = /\b(mix|mixtape|megamix|nonstop|non[ -]stop)\b/i
 const LIVE_PATTERN = /\b(live|concert|show)\b/i
@@ -604,6 +679,12 @@ function App() {
   const [appVersion, setAppVersion] = useState('')
   const [versionHistory, setVersionHistory] = useState([])
   const [versionPopupOpen, setVersionPopupOpen] = useState(false)
+  const [radioGardenMode, setRadioGardenMode] = useState(false)
+  const [rgResults, setRgResults] = useState([])
+  const [rgLoading, setRgLoading] = useState(false)
+  const [rgCountry, setRgCountry] = useState('')
+  const [rgLoadingId] = useState(null)
+  const rgDebounceRef = useRef(null)
   const [updateInfo, setUpdateInfo] = useState(null) // null | { hasUpdate, newVersion, changelog }
 
   useEffect(() => {
@@ -661,7 +742,6 @@ function App() {
   const [stationStreams, setStationStreams] = useState([])
   const [stationStreamIndex, setStationStreamIndex] = useState(0)
   const [primaryStationStreamCount, setPrimaryStationStreamCount] = useState(0)
-  const [hasFetchedAltStationStreams, setHasFetchedAltStationStreams] = useState(false)
   const [isSwitchingStationStream, setIsSwitchingStationStream] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [searchResults, setSearchResults] = useState([])
@@ -736,7 +816,7 @@ function App() {
               setStationStreams(plan.entries)
               setStationStreamIndex(0)
               setPrimaryStationStreamCount(plan.primaryCount)
-              setHasFetchedAltStationStreams(false)
+
               return prevStations
             })
           }, 0)
@@ -761,6 +841,9 @@ function App() {
   const audioMotionContainerRef = useRef(null)
   const audioMotionSourceRef = useRef(null)
   const radioVizStreamDestRef = useRef(null)
+  const radioStallTimeoutRef = useRef(null)
+  const sessionReconnectTimerRef = useRef(null)
+  const sessionReconnectCountRef = useRef(0)
   const electricEnergyRef = useRef(0)
   const vizBgCanvasRef = useRef(null)
 
@@ -1068,10 +1151,6 @@ function App() {
     () => dedupeStations(dedupeById([...stations, ...countryBoostStations, ...radioFavorites])),
     [countryBoostStations, radioFavorites, stations],
   )
-  const fallbackRadioStation = useMemo(
-    () => pickPreferredStation(knownRadioStations, null),
-    [knownRadioStations],
-  )
 
   const visibleTracks = useMemo(
     () => applyFilters(libraryView === 'favorites' ? trackFavorites : allTracks, filters),
@@ -1114,6 +1193,27 @@ function App() {
     localStorage.setItem('hiphop-player-volume', String(volumePercent))
   }, [volumePercent])
 
+
+  // Global radio search (radio-browser.info, cały świat)
+  useEffect(() => {
+    if (!radioGardenMode) return
+    clearTimeout(rgDebounceRef.current)
+    const q = stationSearchTerm.trim()
+    const genre = RADIO_GENRES.find(g => g.id === radioTagFilter)
+    const tagQuery = genre?.tags?.[0] || ''
+    const fullQuery = [q, tagQuery].filter(Boolean).join(' ')
+    if (!fullQuery) { setRgResults([]); return }
+    rgDebounceRef.current = setTimeout(async () => {
+      setRgLoading(true)
+      try {
+        const params = { name: fullQuery, limit: '80', hidebroken: 'false', order: 'clickcount', reverse: 'true' }
+        if (rgCountry) params.countrycode = rgCountry
+        const raw = await fetchStationsFromMirrors(params)
+        setRgResults(dedupeById(raw.filter(s => s.urlResolved || s.url).map(normalizeStation)))
+      } catch { setRgResults([]) }
+      finally { setRgLoading(false) }
+    }, 400)
+  }, [stationSearchTerm, radioGardenMode, rgCountry, radioTagFilter])
 
   // Zapisuj ostatnią stację do localStorage przy każdej zmianie currentStation
   useEffect(() => {
@@ -1171,7 +1271,7 @@ function App() {
             setStationStreams(plan.entries)
             setStationStreamIndex(0)
             setPrimaryStationStreamCount(plan.primaryCount)
-            setHasFetchedAltStationStreams(false)
+
             return selected
           })
 
@@ -1187,7 +1287,7 @@ function App() {
           setStationStreams([])
           setStationStreamIndex(0)
           setPrimaryStationStreamCount(0)
-          setHasFetchedAltStationStreams(false)
+
         }
       } finally {
         if (!ignore) {
@@ -1230,11 +1330,14 @@ function App() {
 
         const boostedResponse = [...response, ...extraByName.flat()]
 
-        const normalized = dedupeStations(dedupeById(
+        const fromApi = dedupeStations(dedupeById(
           boostedResponse
             .filter((station) => station.urlResolved || station.url)
             .map(normalizeStation),
-        )).slice(0, 260)
+        ))
+
+        const curated = countryFilter === 'PL' ? CURATED_PL_STATIONS : []
+        const normalized = dedupeStations(dedupeById([...curated, ...fromApi])).slice(0, 300)
 
         if (!ignore) {
           setCountryBoostStations(normalized)
@@ -1331,6 +1434,8 @@ function App() {
     }
 
     audioRef.current.src = currentRadioStreamUrl
+
+    if (radioStallTimeoutRef.current) clearTimeout(radioStallTimeoutRef.current)
 
     if (mode === 'radio' && isRadioPlaying) {
       audioRef.current.play().catch(() => {
@@ -1540,7 +1645,7 @@ function App() {
 
     setRadioPlayHistory([])
     prevRadioNowPlayingRef.current = ''
-    setRadioNowPlaying(String(currentStation?.lastSong || '').trim())
+    setRadioNowPlaying('')
     pullNowPlaying()
 
     return () => {
@@ -1731,39 +1836,18 @@ function App() {
 
     const plan = buildStationPlaybackCandidates(station, knownRadioStations)
 
+    sessionReconnectCountRef.current = 0
+    if (sessionReconnectTimerRef.current) { clearTimeout(sessionReconnectTimerRef.current); sessionReconnectTimerRef.current = null }
     setCurrentStation(station)
     setStationStreams(plan.entries)
     setStationStreamIndex(0)
     setPrimaryStationStreamCount(plan.primaryCount)
-    setHasFetchedAltStationStreams(false)
+
     setRadioError(options.message || '')
     setIsRadioPlaying(true)
     setIsRadioBuffering(true)
   }
 
-  async function loadAlternativeStationCandidates(station) {
-    if (!station?.name) {
-      return []
-    }
-
-    const alternatives = await fetchStationsFromMirrors({
-      name: station.name,
-      countrycode: station.countryCode || undefined,
-      limit: '120',
-      hidebroken: 'false',
-    })
-
-    return dedupeById(
-      alternatives
-        .filter((entry) => entry.urlResolved || entry.url)
-        .map((entry) => ({
-          id: entry.urlResolved || entry.url,
-          url: entry.urlResolved || entry.url,
-          label: entry.name || station.name,
-          isPrimary: false,
-        })),
-    )
-  }
 
   async function tryNextStationStream() {
     if (isSwitchingStationStream) {
@@ -1796,34 +1880,27 @@ function App() {
         return
       }
 
-      if (!hasFetchedAltStationStreams && currentStation) {
-        const alternatives = await loadAlternativeStationCandidates(currentStation)
-        const merged = dedupeById(
-          [...stationStreams, ...alternatives],
-        )
-
-        setHasFetchedAltStationStreams(true)
-
-        if (merged.length > stationStreams.length) {
-          const nextEntry = merged[stationStreams.length]
-          setStationStreams(merged)
-          setStationStreamIndex(stationStreams.length)
-          setRadioError(`Sprawdziłem ${primaryTotal}/${primaryTotal}. Znalazłem dodatkowe źródła, próbuję ${nextEntry?.label || 'kolejny wariant'}...`)
-          return
-        }
+      // Wszystkie streamy wyczerpane — zatrzymaj i wyczyść src
+      if (audioRef.current) {
+        audioRef.current.pause()
+        audioRef.current.src = ''
+        audioRef.current.load()
       }
-
-      if (fallbackRadioStation && fallbackRadioStation.id && fallbackRadioStation.id !== currentStation?.id) {
-        selectStation(
-          fallbackRadioStation,
-          { message: `Radio ${currentStation?.name || 'tej stacji'} nie działa, odpalamy stację podstawową.` },
-        )
-        return
-      }
-
       setIsRadioPlaying(false)
       setIsRadioBuffering(false)
-      setRadioError(`Nie znaleziono działającego źródła dla ${currentStation?.name || 'tej stacji'}. Użyj innej stacji.`)
+
+      // Jeśli gość jest w sesji — automatycznie spróbuj ponownie po 5s (max 3 razy)
+      if (inSession && !isHost && currentStation && sessionReconnectCountRef.current < 3) {
+        sessionReconnectCountRef.current += 1
+        setRadioError(`Połączenie przerwane, ponawiam za 5s... (${sessionReconnectCountRef.current}/3)`)
+        if (sessionReconnectTimerRef.current) clearTimeout(sessionReconnectTimerRef.current)
+        sessionReconnectTimerRef.current = setTimeout(() => {
+          if (currentStation) selectStation(currentStation)
+        }, 5000)
+      } else {
+        sessionReconnectCountRef.current = 0
+        setRadioError(`Nie można połączyć z ${currentStation?.name || 'tą stacją'}. Spróbuj kliknąć stację ponownie lub wybierz inną.`)
+      }
     } finally {
       setIsSwitchingStationStream(false)
     }
@@ -1839,6 +1916,10 @@ function App() {
     if (notify && inSession) {
       notifyAction('trackChange', { id: track.id, title: track.title, url: track.url, author: track.author, seconds: track.seconds, thumbnail: track.thumbnail, position: 0, playing: autoplay })
     }
+  }
+
+  function handleRgPick(rgStation) {
+    selectStation(rgStation)
   }
 
   function handleStationNext() {
@@ -2416,7 +2497,7 @@ function App() {
 
             <span className="count-pill">
               {mode === 'radio'
-                ? filteredStations.length
+                ? (radioGardenMode ? rgResults.length : filteredStations.length)
                 : libraryView === 'suggested'
                   ? sessionSuggestions.length
                   : visibleTracks.length} pozycji
@@ -2626,8 +2707,33 @@ function App() {
                   type="text"
                   value={stationSearchTerm}
                   onChange={(event) => setStationSearchTerm(event.target.value)}
-                  placeholder="Szukaj stacji..."
+                  placeholder={radioGardenMode ? '🌍 Szukaj stacji...' : 'Szukaj stacji...'}
                 />
+                <button
+                  className={`rg-toggle-btn${radioGardenMode ? ' active' : ''}`}
+                  onClick={() => { setRadioGardenMode(v => !v); setRgResults([]); setStationSearchTerm('') }}
+                  title="Radio Garden — stacje z całego świata"
+                >🌍</button>
+                {radioGardenMode && (
+                  <select className="rg-country-inline" value={rgCountry} onChange={e => setRgCountry(e.target.value)}>
+                    <option value="">🌍 Wszystkie</option>
+                    <option value="PL">🇵🇱 PL</option>
+                    <option value="US">🇺🇸 US</option>
+                    <option value="GB">🇬🇧 GB</option>
+                    <option value="DE">🇩🇪 DE</option>
+                    <option value="FR">🇫🇷 FR</option>
+                    <option value="ES">🇪🇸 ES</option>
+                    <option value="IT">🇮🇹 IT</option>
+                    <option value="BR">🇧🇷 BR</option>
+                    <option value="JP">🇯🇵 JP</option>
+                    <option value="TR">🇹🇷 TR</option>
+                    <option value="RU">🇷🇺 RU</option>
+                    <option value="UA">🇺🇦 UA</option>
+                    <option value="SE">🇸🇪 SE</option>
+                    <option value="NL">🇳🇱 NL</option>
+                    <option value="AU">🇦🇺 AU</option>
+                  </select>
+                )}
               </div>
             ) : null}
           </div>
@@ -2635,7 +2741,37 @@ function App() {
           {trackError && mode === 'player' ? <p className="status-copy error">{trackError}</p> : null}
 
           <div className="library-list">
-            {(mode === 'radio' ? radioLoading : trackLoading) && (mode === 'radio' ? filteredStations : visibleTracks).length === 0
+            {mode === 'radio' && radioGardenMode && (
+              rgLoading
+                ? Array.from({ length: 6 }, (_, i) => (
+                    <div key={i} className="library-item skeleton" style={{ animationDelay: `${i * 0.06}s`, opacity: 0, animation: `fadeIn 0.3s ease ${i * 0.06}s forwards` }}>
+                      <div className="skeleton-art" /><div className="skeleton-copy"><div className="skeleton-line wide" /><div className="skeleton-line narrow" /></div>
+                    </div>
+                  ))
+                : rgResults.length === 0
+                  ? <div className="empty-state">{stationSearchTerm ? 'Brak wyników' : 'Wpisz nazwę stacji lub miasta...'}</div>
+                  : rgResults.map(s => {
+                      const selected = currentStation?.id === s.id
+                      return (
+                        <div
+                          key={s.id}
+                          className={`library-item${selected ? ' active' : ''}`}
+                          onClick={() => handleRgPick(s)}
+                          style={{ cursor: 'pointer' }}
+                        >
+                          <div className="item-art with-badge">
+                            <img src={safeArt(s.favicon, s.name, 'radio')} alt="" onError={e => withFallbackArt(e, s.name, 'radio')} />
+                            <span className="item-flag">{countryFlagEmoji(s.countryCode)}</span>
+                          </div>
+                          <div className="item-copy">
+                            <span className="item-title">{s.name}</span>
+                            <span className="item-meta">{s.country}{s.tags ? ` · ${s.tags.split(',').slice(0,2).join(', ')}` : ''}</span>
+                          </div>
+                        </div>
+                      )
+                    })
+            )}
+            {!(mode === 'radio' && radioGardenMode) && (mode === 'radio' ? radioLoading : trackLoading) && (mode === 'radio' ? filteredStations : visibleTracks).length === 0
               ? Array.from({ length: 8 }, (_, i) => (
                   <div key={i} className="library-item skeleton" style={{ animationDelay: `${i * 0.06}s`, opacity: 0, animation: `fadeIn 0.3s ease ${i * 0.06}s forwards` }}>
                     <div className="skeleton-art" />
@@ -2679,7 +2815,7 @@ function App() {
                   )}
                 </div>
               ))
-            ) : (mode === 'radio' ? filteredStations.slice(0, visibleStationCount) : visibleTracks).map((item) => {
+            ) : (mode === 'radio' && radioGardenMode) ? null : (mode === 'radio' ? filteredStations.slice(0, visibleStationCount) : visibleTracks).map((item) => {
               const selected = mode === 'radio' ? currentStation?.id === item.id : currentTrack?.id === item.id
               const flag = mode === 'radio' ? countryFlagEmoji(item.countryCode) : 'YT'
               const art = mode === 'radio'
@@ -2696,7 +2832,7 @@ function App() {
                     if (mode === 'radio') {
                       if (!checkPerm('canSkip') && !checkPerm('canAdd')) return
                       selectStation(item)
-                      if (inSession) notifyAction('stationChange', { id: item.id, name: item.name, url: item.url, country: item.country, countrycode: item.countrycode, favicon: item.favicon, tags: item.tags, codec: item.codec, bitrate: item.bitrate, lastSong: item.lastSong ?? '' })
+                      if (inSession) notifyAction('stationChange', { id: item.id ?? '', name: item.name ?? '', url: item.url ?? '', country: item.country ?? '', countrycode: item.countrycode ?? '', favicon: item.favicon ?? '', tags: item.tags ?? '', codec: item.codec ?? '', bitrate: item.bitrate ?? 0, lastSong: item.lastSong ?? '' })
                       return
                     }
                     if (!checkPerm('canAdd')) return
@@ -2735,7 +2871,7 @@ function App() {
               <div ref={stationListSentinelRef} style={{ height: 1 }} />
             )}
 
-            {libraryView !== 'suggested' && (mode === 'radio' ? filteredStations : visibleTracks).length === 0 ? (
+            {!(mode === 'radio' && radioGardenMode) && libraryView !== 'suggested' && (mode === 'radio' ? filteredStations : visibleTracks).length === 0 ? (
               <div className="empty-state">
                 {libraryView === 'favorites'
                   ? 'Brak ulubionych w tym trybie.'

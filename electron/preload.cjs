@@ -15,4 +15,7 @@ contextBridge.exposeInMainWorld('playerBridge', {
   downloadUpdate: () => ipcRenderer.invoke('updater:download'),
   onUpdateProgress: (cb) => ipcRenderer.on('updater:progress', (_e, data) => cb(data)),
   restartApp: () => ipcRenderer.invoke('updater:restart'),
+  // Radio Garden
+  radioGardenSearch: (query) => ipcRenderer.invoke('radiogarden:search', query),
+  radioGardenStream: (channelId) => ipcRenderer.invoke('radiogarden:stream', channelId),
 })

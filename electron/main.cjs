@@ -769,3 +769,46 @@ ipcMain.handle('radio:now-playing', async (_event, payload) => {
 
   return readNowPlayingFromIcyStream(targetUrl)
 })
+ipcMain.handle('radiogarden:search', async (_event, query) => {
+  try {
+    const res = await fetch(`https://radio.garden/api/search?q=${encodeURIComponent(query)}`, {
+      headers: { 'User-Agent': 'Mozilla/5.0' }
+    })
+    const data = await res.json()
+    const channels = (data?.hits?.hits || [])
+      .map(h => h._source)
+      .filter(s => s.type === 'channel' && s.page?.type === 'channel')
+      .map(s => ({
+        id: s.page.url.split('/').pop(),
+        title: s.page.title,
+        subtitle: s.page.subtitle || '',
+        country: s.page.country?.title || '',
+        countryCode: s.code || '',
+        place: s.page.place?.title || '',
+        website: s.page.website || '',
+        secure: s.page.secure !== false,
+      }))
+    return channels
+  } catch {
+    return []
+  }
+})
+
+ipcMain.handle('radiogarden:stream', (_event, channelId) => {
+  return new Promise((resolve) => {
+    const https = require('https')
+    console.log('[RG] fetching stream for channelId:', channelId)
+    const req = https.get(
+      `https://radio.garden/ara/content/listen/${channelId}/channel.mp3`,
+      { headers: { 'User-Agent': 'Mozilla/5.0' } },
+      (res) => {
+        req.destroy()
+        console.log('[RG] status:', res.statusCode, 'location:', res.headers['location'])
+        const loc = res.headers['location']
+        resolve(loc || null)
+      }
+    )
+    req.on('error', (e) => { console.log('[RG] error:', e.message); resolve(null) })
+    req.setTimeout(6000, () => { req.destroy(); console.log('[RG] timeout'); resolve(null) })
+  })
+})
