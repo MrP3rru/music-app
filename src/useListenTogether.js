@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback, useState } from 'react'
-import { ref, set, get, onValue, remove, onDisconnect, push, update } from 'firebase/database'
+import { ref, set, get, onValue, remove, onDisconnect, push, update, serverTimestamp } from 'firebase/database'
 import { db } from './firebase'
 
 function generateCode() {
@@ -476,7 +476,7 @@ if (!isHostRef.current) lastSyncedStationIdRef.current = payload.id
     const safeNick = nick.replace(/[.#$[\]]/g, '_')
     const mute = chatMutedRef.current?.[safeNick]
     if (mute?.blocked || (mute?.until && mute.until > Date.now())) return
-    const payload = { nick, text: text.trim(), sentAt: Date.now() }
+    const payload = { nick, text: text.trim(), sentAt: serverTimestamp() }
     if (me) payload.me = true
     if (pmTo) payload.pmTo = pmTo
     push(ref(db, `sessions/${code}/chat`), payload)
@@ -485,7 +485,7 @@ if (!isHostRef.current) lastSyncedStationIdRef.current = payload.id
   const sendSystemMessage = useCallback((text) => {
     const code = sessionCodeRef.current
     if (!code) return
-    push(ref(db, `sessions/${code}/chat`), { nick: '_system_', text, sentAt: Date.now(), system: true })
+    push(ref(db, `sessions/${code}/chat`), { nick: '_system_', text, sentAt: serverTimestamp(), system: true })
   }, [])
 
   const clearChat = useCallback(() => {

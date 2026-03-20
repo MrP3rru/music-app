@@ -1,54 +1,26 @@
 {
-  "version": "1.6.23",
-  "changelog": "Poprawki badge wersji i historia wersji",
+  "version": "1.7.1",
+  "changelog": "Dodano Chat: klikalne linki w wiadomościach + podgląd miniaturki YouTube. (i wiele innych funkcji i poprawek.)",
   "history": [
     {
-      "version": "1.6.23",
+      "version": "1.7.1",
       "date": "2026-03-20",
       "changes": [
-        "Nowe funkcje:Chat: klikalne linki w wiadomościach + podgląd miniaturki YouTube,Player: wklejenie linku YouTube/Shorts do wyszukiwarki ładuje konkretne wideo — działa też dla live streamów Fix Chat nie pokazuje już elementów kolejki ani szkieletów ładowania,Przełączenie na zakładkę Chat nie powoduje już skoku layoutu (płynne zwijanie filtrów),Elementy kolejki mają teraz taki sam rozmiar jak zwykłe elementy biblioteki,Naprawiono układ chatu (flex-direction: column) — wiadomości wypełniają całą przestrzeń poprawnie,Odznaka nieprzeczytanych wiadomości nie resetuje się już fałszywie przy przełączaniu Radio↔Player,Dodano Chat i uprawnienia dla moderatorów,Dodano komendy na chat."
+        "Chat (fix) sentAt jest ustawiany przez serwer Firebase (serverTimestamp()), więc nie zależy od zegara urządzenia. Sortowanie wraca do sentAt — kolejność wiadomości będzie poprawna niezależnie od tego, czyje urządzenie ma przekłamany czas."
       ]
     },
     {
-      "version": "1.6.22",
+      "version": "1.7.0",
       "date": "2026-03-20",
       "changes": [
-        "Nowe funkcje:Chat: klikalne linki w wiadomościach + podgląd miniaturki YouTube,Player: wklejenie linku YouTube/Shorts do wyszukiwarki ładuje konkretne wideo — działa też dla live streamów Fix Chat nie pokazuje już elementów kolejki ani szkieletów ładowania,Przełączenie na zakładkę Chat nie powoduje już skoku layoutu (płynne zwijanie filtrów),Elementy kolejki mają teraz taki sam rozmiar jak zwykłe elementy biblioteki,Naprawiono układ chatu (flex-direction: column) — wiadomości wypełniają całą przestrzeń poprawnie,Odznaka nieprzeczytanych wiadomości nie resetuje się już fałszywie przy przełączaniu Radio↔Player,Dodano Chat i uprawnienia dla moderatorów,Dodano komendy na chat."
-      ]
-    },
-    {
-      "version": "1.6.21",
-      "date": "2026-03-20",
-      "changes": [
-        "Nowe funkcje:Chat: klikalne linki w wiadomościach + podgląd miniaturki YouTube,Player: wklejenie linku YouTube/Shorts do wyszukiwarki ładuje konkretne wideo — działa też dla live streamów Fix Chat nie pokazuje już elementów kolejki ani szkieletów ładowania,Przełączenie na zakładkę Chat nie powoduje już skoku layoutu (płynne zwijanie filtrów),Elementy kolejki mają teraz taki sam rozmiar jak zwykłe elementy biblioteki,Naprawiono układ chatu (flex-direction: column) — wiadomości wypełniają całą przestrzeń poprawnie,Odznaka nieprzeczytanych wiadomości nie resetuje się już fałszywie przy przełączaniu Radio↔Player,Dodano Chat i uprawnienia dla moderatorów,Dodano komendy na chat."
-      ]
-    },
-    {
-      "version": "1.6.20",
-      "date": "2026-03-20",
-      "changes": [
-        "Nowe funkcje:Chat: klikalne linki w wiadomościach + podgląd miniaturki YouTube,Player: wklejenie linku YouTube/Shorts do wyszukiwarki ładuje konkretne wideo — działa też dla live streamów Fix Chat nie pokazuje już elementów kolejki ani szkieletów ładowania,Przełączenie na zakładkę Chat nie powoduje już skoku layoutu (płynne zwijanie filtrów),Elementy kolejki mają teraz taki sam rozmiar jak zwykłe elementy biblioteki,Naprawiono układ chatu (flex-direction: column) — wiadomości wypełniają całą przestrzeń poprawnie,Odznaka nieprzeczytanych wiadomości nie resetuje się już fałszywie przy przełączaniu Radio↔Player,Dodano Chat i uprawnienia dla moderatorów,Dodano komendy na chat."
-      ]
-    },
-    {
-      "version": "1.6.19",
-      "date": "2026-03-20",
-      "changes": [
-        "Nowe funkcje:Chat: klikalne linki w wiadomościach + podgląd miniaturki YouTube,Player: wklejenie linku YouTube/Shorts do wyszukiwarki ładuje konkretne wideo — działa też dla live streamów 🔴 Fix Chat nie pokazuje już elementów kolejki ani szkieletów ładowania,Przełączenie na zakładkę Chat nie powoduje już skoku layoutu (płynne zwijanie filtrów),Elementy kolejki mają teraz taki sam rozmiar jak zwykłe elementy biblioteki,Naprawiono układ chatu (flex-direction: column) — wiadomości wypełniają całą przestrzeń poprawnie,Odznaka nieprzeczytanych wiadomości nie resetuje się już fałszywie przy przełączaniu Radio↔Player,Dodano Chat i uprawnienia dla moderatorów,Dodano komendy na chat."
-      ]
-    },
-    {
-      "version": "1.6.18",
-      "date": "2026-03-20",
-      "changes": [
-        "Nowe funkcje:Chat: klikalne linki w wiadomościach + podgląd miniaturki YouTube,Player: wklejenie linku YouTube/Shorts do wyszukiwarki ładuje konkretne wideo — działa też dla live streamów 🔴 Fix Chat nie pokazuje już elementów kolejki ani szkieletów ładowania,Przełączenie na zakładkę Chat nie powoduje już skoku layoutu (płynne zwijanie filtrów),Elementy kolejki mają teraz taki sam rozmiar jak zwykłe elementy biblioteki,Naprawiono układ chatu (flex-direction: column) — wiadomości wypełniają całą przestrzeń poprawnie,Odznaka nieprzeczytanych wiadomości nie resetuje się już fałszywie przy przełączaniu Radio↔Player,Dodano Chat i uprawnienia dla moderatorów,Dodano komendy na chat. "
-      ]
-    },
-    {
-      "version": "1.6.17",
-      "date": "2026-03-20",
-      "changes": [
-        "Nowe funkcje:"
+        "Nowe funkcje:Chat: klikalne linki w wiadomościach + podgląd miniaturki YouTube,Player: wklejenie linku YouTube/Shorts do wyszukiwarki ładuje konkretne wideo — działa też dla live streamów",
+        "Fix Chat nie pokazuje już elementów kolejki ani szkieletów ładowania",
+        "Przełączenie na zakładkę Chat nie powoduje już skoku layoutu (płynne zwijanie filtrów)",
+        "Elementy kolejki mają teraz taki sam rozmiar jak zwykłe elementy biblioteki",
+        "Naprawiono układ chatu (flex-direction: column) — wiadomości wypełniają całą przestrzeń poprawnie",
+        "Odznaka nieprzeczytanych wiadomości nie resetuje się już fałszywie przy przełączaniu Radio↔Player",
+        "Dodano Chat i uprawnienia dla moderatorów",
+        "Dodano komendy na chat."
       ]
     },
     {
