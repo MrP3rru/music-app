@@ -309,8 +309,7 @@ const isDev = !app.isPackaged
 
 app.commandLine.appendSwitch('disk-cache-dir', path.join(os.tmpdir(), 'hiphop-player-cache'))
 
-let staticServerProcess = null
-const STATIC_SERVER_PORT = 3000
+const DIST_DIR = path.join(__dirname, '..', 'dist')
 
 function resolveAppIconPath() {
   // electron/ jest pakowany razem z appem - sciezka przez __dirname zawsze dziala
@@ -386,7 +385,7 @@ function createWindow() {
     return
   }
 
-  win.loadURL(`http://localhost:${STATIC_SERVER_PORT}`)
+  win.loadFile(path.join(DIST_DIR, 'index.html'))
 }
 
 function extractIcyStreamTitle(metadataText) {
@@ -537,41 +536,59 @@ ipcMain.handle('youtube:search', async (_event, query, options) => {
   return searchYoutube(phrase, 20, options || {})
 })
 
+ipcMain.handle('youtube:video-by-id', async (_event, videoId) => {
+  const id = String(videoId || '').trim()
+  if (!id) return null
+  if (YOUTUBE_API_KEY) {
+    try {
+      const params = new URLSearchParams({ part: 'snippet,contentDetails,liveStreamingDetails', id, key: YOUTUBE_API_KEY })
+      const res = await fetch(`https://www.googleapis.com/youtube/v3/videos?${params}`)
+      if (!res.ok) throw new Error(`YT API ${res.status}`)
+      const data = await res.json()
+      const v = data.items?.[0]
+      if (!v) return null
+      const isLive = v.snippet.liveBroadcastContent === 'live' || v.snippet.liveBroadcastContent === 'upcoming'
+      const iso = v.contentDetails.duration || 'PT0S'
+      const m = iso.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/)
+      const seconds = (Number(m?.[1] || 0) * 3600) + (Number(m?.[2] || 0) * 60) + Number(m?.[3] || 0)
+      const mm = Math.floor(seconds / 60)
+      const ss = String(seconds % 60).padStart(2, '0')
+      return {
+        id,
+        title: v.snippet.title,
+        author: v.snippet.channelTitle,
+        duration: isLive ? '🔴 LIVE' : (seconds > 0 ? `${mm}:${ss}` : 'live'),
+        seconds: isLive ? 0 : seconds,
+        thumbnail: v.snippet.thumbnails?.medium?.url || v.snippet.thumbnails?.default?.url || '',
+        url: `https://www.youtube.com/watch?v=${id}`,
+        isLive,
+      }
+    } catch {}
+  }
+  // Fallback: yts
+  try {
+    const result = await yts({ videoId: id })
+    if (!result?.title) return null
+    const seconds = result.seconds || 0
+    const mm = Math.floor(seconds / 60)
+    const ss = String(seconds % 60).padStart(2, '0')
+    return {
+      id,
+      title: result.title,
+      author: result.author?.name || '',
+      duration: seconds > 0 ? `${mm}:${ss}` : '🔴 LIVE',
+      seconds,
+      thumbnail: result.thumbnail,
+      url: `https://www.youtube.com/watch?v=${id}`,
+      isLive: seconds === 0,
+    }
+  } catch { return null }
+})
+
 
 app.whenReady().then(() => {
   initDiscordRPC()
-  if (!isDev) {
-    const nodePath = process.execPath
-    
-
-    staticServerProcess = child_process.spawn(
-      nodePath,
-      [path.join(__dirname, 'static-server.cjs')],
-      {
-        stdio: ['ignore', 'pipe', 'pipe'],
-        env: { ...process.env, PORT: '3000' },
-        detached: false
-      }
-    )
-
-    staticServerProcess.on('error', (err) => {
-      console.error('[static-server failed]', err)
-    })
-
-    let windowCreated = false;
-    const onServerReady = (data) => {
-      const str = data.toString();
-      if (str.includes('Static server running') && !windowCreated) {
-        windowCreated = true;
-        createWindow();
-      }
-    };
-    staticServerProcess.stdout.on('data', onServerReady);
-    staticServerProcess.stderr.on('data', onServerReady);
-
-  } else {
-    createWindow()
-  }
+  createWindow()
 
   // Auto-approve getDisplayMedia z loopback audio dla wizualizera
   session.defaultSession.setDisplayMediaRequestHandler((_request, callback) => {
@@ -589,7 +606,6 @@ app.whenReady().then(() => {
 
 app.on('will-quit', () => {
   if (discordIPC?.connected) discordIPC.send(null)
-  if (staticServerProcess) staticServerProcess.kill()
 })
 
 app.on('window-all-closed', () => {

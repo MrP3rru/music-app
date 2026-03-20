@@ -1,26 +1,37 @@
 {
-  "version": "1.6.16",
+  "version": "1.6.17",
   "changelog": "Poprawki badge wersji i historia wersji",
   "history": [
+    {
+      "version": "1.6.17",
+      "date": "2026-03-20",
+      "changes": [
+        "Nowe funkcje:"
+      ]
+    },
     {
       "version": "1.6.16",
       "date": "2026-03-19",
       "changes": [
-        "Dodano badge z pingiem stacji radiowej, poprawiono bedy ze stacjami radiowymi, poprawiono wygląd i styl UI, FIX błędów ze zmianą stacji radiowej."
+        "Dodano badge z pingiem stacji radiowej.",
+        "Poprawiono błędy ze stacjami radiowymi, które nie miały pingów.",
+        "Poprawiono wygląd i styl UI, FIX błędów ze zmianą stacji radiowej w trybie wtg_."
       ]
     },
     {
       "version": "1.6.15",
       "date": "2026-03-19",
       "changes": [
-        "Wprowadzona poprawka dla zmiany stacji radiowej w nowym wyszukiwaniu w trybie wtg_"
+        "Wprowadzona poprawka dla zmiany stacji radiowej w nowym wyszukiwaniu w trybie wtg_",
+        "Dodana integracja nowych stacji radiowych z trybem wtg_"
       ]
     },
     {
       "version": "1.6.14",
       "date": "2026-03-19",
       "changes": [
-        "Dodano +10k stacji radiowych do wyszukania "
+        "Dodano +1000 stacji radiowych do wyszukania ",
+        "Integracja z API Radio Garden dla rozszerzonej bazy stacji radiowych"
       ]
     },
     {
@@ -34,35 +45,38 @@
       "version": "1.6.12",
       "date": "2026-03-18",
       "changes": [
-        "Zmiana koloru (fix)"
+        "Zmiana koloru tła nawigacji (fix)"
       ]
     },
     {
       "version": "1.6.11",
       "date": "2026-03-18",
       "changes": [
-        "aktualizacja"
+        "Aktualizacja poprawiająca wydajność aplikacji (FIX)",
+        "Poprawiono rozmiar UI i zmieniono kolor tła."
       ]
     },
     {
       "version": "1.6.10",
       "date": "2026-03-18",
       "changes": [
-        "Poprawa kolorów w guziku aktualizacji."
+        "Poprawa kolorów w guziku aktualizacji.",
+        "Naprawiono pokazywanie sie guzika aktualizacji."
       ]
     },
     {
       "version": "1.6.9",
       "date": "2026-03-18",
       "changes": [
-        "aktualizacja"
+        "Aktualizacja poprawiająca wydajność aplikacji (FIX)"
       ]
     },
     {
       "version": "1.6.8",
       "date": "2026-03-18",
       "changes": [
-        "System automatycznych aktualizacji przez GitHub (FIX)"
+        "System automatycznych aktualizacji przez GitHub (FIX)",
+        "Poprawki i optymalizacja kodu związana z aktualizacjami"
       ]
     },
     {

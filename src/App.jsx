@@ -3,6 +3,7 @@ import ReactPlayer from 'react-player'
 import AudioMotionAnalyzer from 'audiomotion-analyzer'
 import ElectricBorder from './ElectricBorder'
 import { useListenTogether } from './useListenTogether'
+import { soundJoin, soundLeave, soundPermission, soundSessionEnd, soundSwitchRadio, soundSwitchPlayer, soundStartup, soundStop, soundCreateSession, soundChatMsg, setUiVolume } from './sounds'
 import UpdateModal from './UpdateModal'
 import VersionPopup from './VersionPopup'
 import './App.css'
@@ -631,6 +632,42 @@ function toEffectiveVolume(percent, curve = 'linear') {
   }
 }
 
+function extractYoutubeId(url) {
+  try {
+    const m = url.match(/(?:youtube\.com\/(?:watch\?(?:.*&)?v=|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/)
+    return m ? m[1] : null
+  } catch { return null }
+}
+
+function renderChatText(text) {
+  if (!text) return null
+  const parts = text.split(/(https?:\/\/[^\s]+)/g)
+  const nodes = []
+  let previewAdded = false
+  parts.forEach((part, i) => {
+    if (/^https?:\/\//.test(part)) {
+      const ytId = extractYoutubeId(part)
+      nodes.push(
+        <a key={i} href={part} className="chat-link" target="_blank" rel="noreferrer">
+          {part}
+        </a>
+      )
+      if (ytId && !previewAdded) {
+        previewAdded = true
+        nodes.push(
+          <div key={`yt-${i}`} className="chat-link-preview">
+            <img src={`https://img.youtube.com/vi/${ytId}/mqdefault.jpg`} alt="" className="chat-preview-thumb" draggable={false} />
+            <span className="chat-preview-label">▶ YouTube</span>
+          </div>
+        )
+      }
+    } else if (part) {
+      nodes.push(part)
+    }
+  })
+  return nodes
+}
+
 function buildFavoriteEntry(type, item, genreId) {
   return {
     key: `${type}:${item.id}`,
@@ -675,6 +712,23 @@ const IDLE_BARS = Array.from({ length: 48 }, (_, i) => {
   return Math.round(12 + Math.sin(t * Math.PI) * 58 + Math.sin(t * Math.PI * 3) * 10)
 })
 
+const CHAT_COMMANDS = [
+  { cmd: '/next',   desc: 'Następny utwór/stacja',          argHint: '',                role: 'mod' },
+  { cmd: '/stop',   desc: 'Zatrzymaj odtwarzanie',          argHint: '',                role: 'mod' },
+  { cmd: '/pause',  desc: 'Pauza',                          argHint: '',                role: 'mod' },
+  { cmd: '/play',   desc: 'Wznów odtwarzanie',              argHint: '',                role: 'mod' },
+  { cmd: '/mute',   desc: 'Wycisz użytkownika',             argHint: '[nick] [sek=30]', role: 'host' },
+  { cmd: '/unmute', desc: 'Odcisz użytkownika',             argHint: '[nick]',          role: 'host' },
+  { cmd: '/clear',  desc: 'Wyczyść czat',                   argHint: '',                role: 'host' },
+  { cmd: '/me',     desc: 'Akcja/emote',                    argHint: '[tekst]',         role: 'mod' },
+  { cmd: '/msg',    desc: 'Prywatna wiadomość',             argHint: '[nick] [tekst]',  role: 'all' },
+  { cmd: '/r',      desc: 'Odpowiedz na ostatni PM',        argHint: '[tekst]',         role: 'all' },
+  { cmd: '/vol',    desc: 'Ustaw głośność',                 argHint: '[0-100]',         role: 'all' },
+  { cmd: '/queue',  desc: 'Pokaż kolejkę',                  argHint: '',                role: 'all' },
+  { cmd: '/sys',    desc: 'Wł/Wył wiadomości systemowe',   argHint: '',                role: 'all' },
+  { cmd: '/help',   desc: 'Lista komend',                   argHint: '',                role: 'all' },
+]
+
 function App() {
   const [appVersion, setAppVersion] = useState('')
   const [versionHistory, setVersionHistory] = useState([])
@@ -691,13 +745,15 @@ function App() {
     window.playerBridge?.getVersion?.().then(v => {
       if (v?.version) { setAppVersion(v.version); setVersionHistory(v.history || []) }
     })
+    // Dźwięk startowy po chwili (żeby AudioContext mógł się zainicjować)
+    const startSound = setTimeout(() => soundStartup(), 800)
     // Sprawdź aktualizacje 3s po starcie (nie blokuj ładowania UI)
     const t = setTimeout(() => {
       window.playerBridge?.checkUpdate?.().then(info => {
         if (info?.hasUpdate) setUpdateInfo(info)
       }).catch(() => {})
     }, 3000)
-    return () => clearTimeout(t)
+    return () => { clearTimeout(t); clearTimeout(startSound) }
   }, [])
 
   const [splashVisible, setSplashVisible] = useState(true)
@@ -714,6 +770,13 @@ function App() {
   // Przywracanie wybranego gatunku i widoku biblioteki z localStorage
   const [genreId, setGenreId] = useState(() => localStorage.getItem('hiphop-player-genre') || genres[0].id)
   const [libraryView, setLibraryView] = useState(() => localStorage.getItem('hiphop-player-libraryview') || 'all')
+  const [chatInput, setChatInput] = useState('')
+  const [chatUnread, setChatUnread] = useState(0)
+  const chatEndRef = useRef(null)
+  const [cmdSuggestions, setCmdSuggestions] = useState([])
+  const [cmdSuggestIdx, setCmdSuggestIdx] = useState(0)
+  const cmdListRef = useRef(null)
+  const lastPmSenderRef = useRef(null)
     // Zapisuj wybrany gatunek do localStorage przy każdej zmianie
     useEffect(() => {
       localStorage.setItem('hiphop-player-genre', genreId)
@@ -723,6 +786,7 @@ function App() {
     useEffect(() => {
       localStorage.setItem('hiphop-player-libraryview', libraryView)
     }, [libraryView])
+
   // Przywracanie filtra kraju i frazy wyszukiwania stacji z localStorage
   const [countryFilter, setCountryFilter] = useState('PL')
   const [radioTagFilter, setRadioTagFilter] = useState('hiphop')
@@ -754,6 +818,7 @@ function App() {
   const [isTrackPlaying, setIsTrackPlaying] = useState(false)
   const [isTrackReady, setIsTrackReady] = useState(false)
   const [resolvedTrackUrl, setResolvedTrackUrl] = useState(null)
+  const [sessionEndedMsg, setSessionEndedMsg] = useState(null)
   const [radioNowPlaying, setRadioNowPlaying] = useState('')
   const [radioNowPlayingAt, setRadioNowPlayingAt] = useState(null)
   const [radioPlayHistory, setRadioPlayHistory] = useState([])
@@ -1213,9 +1278,10 @@ function App() {
     localStorage.setItem('hiphop-player-favorites', JSON.stringify(favorites))
   }, [favorites])
 
-  // Zapisuj głośność do localStorage przy każdej zmianie
+  // Zapisuj głośność do localStorage przy każdej zmianie + synchronizuj dźwięki UI
   useEffect(() => {
     localStorage.setItem('hiphop-player-volume', String(volumePercent))
+    setUiVolume(volumePercent)
   }, [volumePercent])
 
 
@@ -1801,7 +1867,7 @@ function App() {
   function checkPerm(perm) {
     if (!inSession || isHost) return true
     if (myPermissions[perm]) return true
-    const labels = { canPlay: 'sterować odtwarzaniem', canSkip: 'pomijać utwory', canAdd: 'wybierać utwory' }
+    const labels = { canPlay: 'uprawnienia moderatora', canSkip: 'uprawnienia moderatora', canAdd: 'uprawnienia moderatora' }
     showSessionToast(`Tylko host może ${labels[perm] ?? 'to zrobić'} — poproś o uprawnienia`)
     return false
   }
@@ -1830,9 +1896,7 @@ function App() {
   async function handleTrackSearch(event) {
     event.preventDefault()
 
-    if (!searchTerm.trim()) {
-      return
-    }
+    if (!searchTerm.trim()) return
 
     if (!window.playerBridge?.searchYoutube) {
       setTrackError('Wyszukiwanie YouTube działa tylko po uruchomieniu przez Electron.')
@@ -1841,6 +1905,27 @@ function App() {
 
     setTrackLoading(true)
     setTrackError('')
+
+    // Wykryj link YouTube — załaduj konkretne wideo (działa też dla live)
+    const ytId = extractYoutubeId(searchTerm.trim())
+    if (ytId && window.playerBridge.getVideoById) {
+      try {
+        const video = await window.playerBridge.getVideoById(ytId)
+        if (video) {
+          setSearchResults([video])
+          setCurrentTrack(video)
+          setPreviousTracks([])
+          setActiveTrackQuery('')
+        } else {
+          setTrackError('Nie znaleziono wideo pod tym linkiem.')
+        }
+      } catch {
+        setTrackError('Nie udało się pobrać informacji o wideo.')
+      } finally {
+        setTrackLoading(false)
+      }
+      return
+    }
 
     try {
       const raw = await window.playerBridge.searchYoutube(searchTerm)
@@ -1891,6 +1976,7 @@ function App() {
       const primaryTotal = Math.max(1, primaryStationStreamCount || Math.min(3, stationStreams.length))
       if (stationStreamIndex < primaryTotal - 1) {
         setStationStreamIndex((previous) => previous + 1)
+        const checkedNow = stationStreamIndex + 1
         const tryingIndex = stationStreamIndex + 2
         setRadioError(`Stream ${checkedNow}/${primaryTotal} nie działa. Próbuję ${tryingIndex}/${primaryTotal}...`)
         return
@@ -2176,6 +2262,8 @@ function App() {
     }
   }
 
+  const sendSysMsgRef = useRef(null)
+
   const {
     sessionCode,
     isHost,
@@ -2193,7 +2281,18 @@ function App() {
     removeSuggestion,
     syncPositionNow,
     updatePermission,
+    setModerator,
     notifyAction,
+    chatMessages,
+    sendChatMessage,
+    sendSystemMessage,
+    clearChat,
+    chatMuted,
+    hostNick,
+    deleteChatMsg,
+    muteChatUser,
+    blockChatUser,
+    unblockChatUser,
   } = useListenTogether({
     mode,
     currentStation,
@@ -2236,22 +2335,263 @@ function App() {
       updateMode(nextMode, true)
     },
     onActionNotification: (nick, type, payload) => {
-      const verb = {
+      const sysVerb = {
         playPause: payload.playing
-          ? `${nick} wznowił ${payload.mode === 'radio' ? 'radio' : 'odtwarzanie'}`
-          : `${nick} wstrzymał ${payload.mode === 'radio' ? 'radio' : 'odtwarzanie'}`,
-        trackChange: `${nick} wybrał: ${payload.title ?? ''}`,
-        modeChange: `${nick} przełączył na ${payload.mode === 'radio' ? 'Radio' : 'Player'}`,
-        stationChange: `${nick} zmienił stację: ${payload.name ?? ''}`,
+          ? `▶ ${nick} wznowił ${payload.mode === 'radio' ? 'radio' : 'odtwarzanie'}`
+          : `⏸ ${nick} wstrzymał ${payload.mode === 'radio' ? 'radio' : 'odtwarzanie'}`,
+        trackChange: `🎵 ${nick} włączył: ${payload.title ?? ''}`,
+        modeChange: `🔄 ${nick} przełączył na ${payload.mode === 'radio' ? 'Radio' : 'Player'}`,
+        stationChange: `📻 ${nick} zmienił stację: ${payload.name ?? ''}`,
       }
-      showSessionToast(verb[type] ?? `${nick} wykonał akcję`)
+      const text = sysVerb[type]
+      if (text) sendSysMsgRef.current?.(text)
+      showSessionToast(text?.replace(/^[^ ]+ /, '') ?? `${nick} wykonał akcję`)
     },
   })
 
-  // Reset sugerowanych ID po zakończeniu sesji (po useListenTogether żeby inSession było dostępne)
+  // Zawsze aktualny ref do sendSystemMessage (używany w onActionNotification przed inicjalizacją)
+  sendSysMsgRef.current = sendSystemMessage
+
+  // Reset po zakończeniu sesji
   useEffect(() => {
-    if (!inSession) setSuggestedIds(new Set())
+    if (!inSession) {
+      setSuggestedIds(new Set())
+      setChatUnread(0)
+      setLibraryView((v) => (v === 'chat' || v === 'suggested') ? 'all' : v)
+    }
   }, [inSession])
+
+  // System messages dla dołączenia/wyjścia słuchaczy (tylko host wysyła)
+  const prevListenersRef = useRef([])
+  useEffect(() => {
+    if (!inSession) { prevListenersRef.current = []; return }
+    const prev = prevListenersRef.current
+    const curr = sessionListeners
+    if (isHost) {
+      curr.forEach(l => {
+        if (!prev.find(p => p.key === l.key))
+          sendSystemMessage(`👤 ${l.nickname} dołączył do sesji`)
+      })
+      prev.forEach(l => {
+        if (!curr.find(c => c.key === l.key))
+          sendSystemMessage(`👤 ${l.nickname} opuścił sesję`)
+      })
+    }
+    prevListenersRef.current = curr
+  }, [sessionListeners]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Widoczność wiadomości systemowych (localStorage)
+  const [showSystemMsgs, setShowSystemMsgs] = useState(
+    () => localStorage.getItem('chat-show-sys') !== 'false'
+  )
+
+  // Chat — tick co sekundę gdy ktoś jest wyciszony (countdown)
+  const [chatTick, setChatTick] = useState(0)
+  useEffect(() => {
+    const hasTimed = Object.values(chatMuted).some(m => !m.blocked && m.until && m.until > Date.now())
+    if (!hasTimed) return
+    const id = setInterval(() => setChatTick(t => t + 1), 1000)
+    return () => clearInterval(id)
+  }, [chatMuted, chatTick])
+
+  // Chat — auto-scroll i licznik nieprzeczytanych (ref zapobiega fałszywemu resetowi)
+  const lastSeenChatCountRef = useRef(0)
+  const lastSoundedChatCountRef = useRef(0)
+  const myNicknameRef = useRef(myNickname)
+  useEffect(() => { myNicknameRef.current = myNickname }, [myNickname])
+
+  useEffect(() => {
+    if (libraryView === 'chat') {
+      lastSeenChatCountRef.current = chatMessages.length
+      lastSoundedChatCountRef.current = chatMessages.length
+      setChatUnread(0)
+      chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    } else {
+      setChatUnread(Math.max(0, chatMessages.length - lastSeenChatCountRef.current))
+      if (chatMessages.length > lastSoundedChatCountRef.current) {
+        const last = chatMessages[chatMessages.length - 1]
+        if (last && !last.system && last.nick !== myNicknameRef.current) soundChatMsg()
+        lastSoundedChatCountRef.current = chatMessages.length
+      }
+    }
+  }, [chatMessages]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Reset unread gdy otworzysz chat
+  useEffect(() => {
+    if (libraryView === 'chat') {
+      lastSeenChatCountRef.current = chatMessages.length
+      lastSoundedChatCountRef.current = chatMessages.length
+      setChatUnread(0)
+      setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'instant' }), 50)
+    }
+  }, [libraryView]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Pokaż modal gdy sesja zakończona z błędem
+  useEffect(() => {
+    if (togetherError) {
+      soundSessionEnd()
+      setSessionEndedMsg(togetherError)
+    }
+  }, [togetherError])
+
+  // Dźwięk zmiany trybu
+  const prevModeRef = useRef(null)
+  useEffect(() => {
+    if (prevModeRef.current === null) { prevModeRef.current = mode; return }
+    if (mode === prevModeRef.current) return
+    prevModeRef.current = mode
+    if (mode === 'radio') soundSwitchRadio()
+    else if (mode === 'player') soundSwitchPlayer()
+  }, [mode])
+
+  // Dźwięk dołączenia/wyjścia z sesji (tylko gdy w sesji)
+  const prevListenerCountRef = useRef(null)
+  useEffect(() => {
+    if (!inSession) { prevListenerCountRef.current = null; return }
+    if (prevListenerCountRef.current === null) { prevListenerCountRef.current = listenerCount; return }
+    if (listenerCount > prevListenerCountRef.current) soundJoin()
+    else if (listenerCount < prevListenerCountRef.current) soundLeave()
+    prevListenerCountRef.current = listenerCount
+  }, [listenerCount, inSession])
+
+  // Dźwięk gdy dostaniemy nowe uprawnienie (gość)
+  const prevPermsRef = useRef(null)
+  useEffect(() => {
+    if (!inSession || isHost) { prevPermsRef.current = null; return }
+    const prev = prevPermsRef.current
+    const curr = myPermissions
+    if (prev !== null) {
+      const gained = (!prev.canPlay && curr.canPlay) || (!prev.canSkip && curr.canSkip) || (!prev.canAdd && curr.canAdd)
+      if (gained) soundPermission()
+    }
+    prevPermsRef.current = { ...curr }
+  }, [myPermissions, inSession, isHost])
+
+  // Dźwięk zatrzymania radia
+  const prevRadioPlayingRef = useRef(null)
+  useEffect(() => {
+    if (prevRadioPlayingRef.current === null) { prevRadioPlayingRef.current = isRadioPlaying; return }
+    if (prevRadioPlayingRef.current === true && isRadioPlaying === false) soundStop()
+    prevRadioPlayingRef.current = isRadioPlaying
+  }, [isRadioPlaying])
+
+  // Dźwięk zatrzymania playera
+  const prevTrackPlayingRef = useRef(null)
+  useEffect(() => {
+    if (prevTrackPlayingRef.current === null) { prevTrackPlayingRef.current = isTrackPlaying; return }
+    if (prevTrackPlayingRef.current === true && isTrackPlaying === false) soundStop()
+    prevTrackPlayingRef.current = isTrackPlaying
+  }, [isTrackPlaying])
+
+  function handleChatCommand(raw) {
+    const parts = raw.trim().split(/\s+/)
+    const cmd = parts[0].toLowerCase()
+    const args = parts.slice(1)
+    const noPerms = () => showSessionToast('Brak uprawnień do tej komendy.')
+    const hostOnly = () => showSessionToast('Tylko host może użyć tej komendy.')
+    const isMod = isHost || (myPermissions.canPlay && myPermissions.canSkip && myPermissions.canAdd)
+
+    switch (cmd) {
+      case '/clear':
+        if (!isHost) return hostOnly()
+        clearChat()
+        sendSystemMessage(`🗑️ ${myNickname} wyczyszcił czat`)
+        return
+      case '/next':
+        if (!checkPerm('canSkip')) return noPerms()
+        if (mode === 'radio') handleStationNext()
+        else handleTrackNext(true)
+        return
+      case '/stop':
+        if (!checkPerm('canPlay')) return noPerms()
+        if (mode === 'radio') {
+          audioRef.current?.pause()
+          setIsRadioPlaying(false)
+        } else {
+          setIsTrackPlaying(false)
+          if (inSession) notifyAction('playPause', { playing: false, mode: 'player' })
+        }
+        return
+      case '/pause':
+        if (!checkPerm('canPlay')) return noPerms()
+        if (mode === 'radio') {
+          audioRef.current?.pause()
+          setIsRadioPlaying(false)
+        } else {
+          setIsTrackPlaying(false)
+          if (inSession) notifyAction('playPause', { playing: false, mode: 'player' })
+        }
+        return
+      case '/play':
+        if (!checkPerm('canPlay')) return noPerms()
+        if (mode === 'player') {
+          setIsTrackPlaying(true)
+          if (inSession) notifyAction('playPause', { playing: true, mode: 'player' })
+        }
+        return
+      case '/mute': {
+        if (!isHost) return hostOnly()
+        const nick = args[0]
+        const secs = parseInt(args[1]) || 30
+        if (!nick) return showSessionToast('Użycie: /mute [nick] [sekundy]')
+        muteChatUser(nick, secs)
+        sendSystemMessage(`🔇 ${nick} został wyciszony na ${secs}s`)
+        return
+      }
+      case '/unmute': {
+        if (!isHost) return hostOnly()
+        const nick = args[0]
+        if (!nick) return showSessionToast('Użycie: /unmute [nick]')
+        unblockChatUser(nick)
+        sendSystemMessage(`🔊 ${nick} został odciszony`)
+        return
+      }
+      case '/me': {
+        if (!isMod) return noPerms()
+        const text = args.join(' ')
+        if (!text) return
+        sendChatMessage(text, true)
+        return
+      }
+      case '/msg': {
+        const target = args[0]
+        const text = args.slice(1).join(' ')
+        if (!target || !text) return showSessionToast('Użycie: /msg [nick] [wiadomość]')
+        sendChatMessage(text, false, target)
+        return
+      }
+      case '/r': {
+        const text = args.join(' ')
+        if (!text) return showSessionToast('Użycie: /r [wiadomość]')
+        if (!lastPmSenderRef.current) return showSessionToast('Brak ostatniego PM do odpowiedzi.')
+        sendChatMessage(text, false, lastPmSenderRef.current)
+        return
+      }
+      case '/vol': {
+        const v = parseInt(args[0])
+        if (isNaN(v) || v < 0 || v > 100) return showSessionToast('Użycie: /vol [0-100]')
+        setVolumePercent(v)
+        showSessionToast(`🔊 Głośność: ${v}%`)
+        return
+      }
+      case '/queue':
+        showSessionToast(`Kolejka: ${sessionSuggestions.length} ${sessionSuggestions.length === 1 ? 'utwór' : 'utworów'}`)
+        return
+      case '/sys':
+        setShowSystemMsgs(v => {
+          const next = !v
+          localStorage.setItem('chat-show-sys', String(next))
+          showSessionToast(next ? '✅ Wiadomości systemowe włączone' : '🚫 Wiadomości systemowe wyłączone')
+          return next
+        })
+        return
+      case '/help':
+        showSessionToast('/clear /next /stop /pause /play /mute /unmute /me /msg /r /vol /queue /sys')
+        return
+      default:
+        showSessionToast(`Nieznana komenda: ${cmd}. Wpisz /help po listę.`)
+    }
+  }
 
   return (
     <>
@@ -2530,8 +2870,14 @@ function App() {
               </button>
               {inSession && mode === 'player' && (
                 <button className={`${libraryView === 'suggested' ? 'active' : ''} suggested-tab`} onClick={() => setLibraryView('suggested')}>
-                  Sugerowane
+                  Kolejka
                   {sessionSuggestions.length > 0 && <span className="suggested-badge">{sessionSuggestions.length}</span>}
+                </button>
+              )}
+              {inSession && (
+                <button className={`${libraryView === 'chat' ? 'active' : ''} chat-tab`} onClick={() => setLibraryView('chat')}>
+                  Chat
+                  {chatUnread > 0 && <span className="chat-unread-badge">{chatUnread > 99 ? '99+' : chatUnread}</span>}
                 </button>
               )}
             </div>
@@ -2541,10 +2887,13 @@ function App() {
                 ? (radioGardenMode ? rgResults.length : filteredStations.length)
                 : libraryView === 'suggested'
                   ? sessionSuggestions.length
-                  : visibleTracks.length} pozycji
+                  : libraryView === 'chat'
+                    ? chatMessages.length
+                    : visibleTracks.length} pozycji
             </span>
           </div>
 
+          <div className={`library-extras${libraryView === 'chat' ? ' library-extras--hidden' : ''}`}>
           {mode === 'player' ? (
             <>
               <div className="filters-panel">
@@ -2780,8 +3129,9 @@ function App() {
           </div>
 
           {trackError && mode === 'player' ? <p className="status-copy error">{trackError}</p> : null}
+          </div>
 
-          <div className="library-list">
+          <div className={`library-list${libraryView === 'chat' ? ' library-list--chat' : ''}`}>
             {mode === 'radio' && radioGardenMode && (
               rgLoading
                 ? Array.from({ length: 6 }, (_, i) => (
@@ -2812,7 +3162,7 @@ function App() {
                       )
                     })
             )}
-            {!(mode === 'radio' && radioGardenMode) && (mode === 'radio' ? radioLoading : trackLoading) && (mode === 'radio' ? filteredStations : visibleTracks).length === 0
+            {libraryView !== 'chat' && !(mode === 'radio' && radioGardenMode) && (mode === 'radio' ? radioLoading : trackLoading) && (mode === 'radio' ? filteredStations : visibleTracks).length === 0
               ? Array.from({ length: 8 }, (_, i) => (
                   <div key={i} className="library-item skeleton" style={{ animationDelay: `${i * 0.06}s`, opacity: 0, animation: `fadeIn 0.3s ease ${i * 0.06}s forwards` }}>
                     <div className="skeleton-art" />
@@ -2825,7 +3175,7 @@ function App() {
               : null}
             {libraryView === 'suggested' && mode === 'player' ? (
               sessionSuggestions.length === 0 ? (
-                <div className="empty-state">Brak sugestii — goście mogą sugerować utwory przyciskiem przy każdym utworze.</div>
+                <div className="empty-state">Kolejka jest pusta — goście mogą dodawać utwory przyciskiem przy każdym utworze.</div>
               ) : sessionSuggestions.map((item) => (
                 <div key={item.key} className="library-item suggestion-item">
                   <div className="item-art with-badge">
@@ -2856,6 +3206,250 @@ function App() {
                   )}
                 </div>
               ))
+            ) : libraryView === 'chat' ? (
+              <div className="chat-panel">
+                <div className="chat-messages">
+                  {chatMessages.length === 0 && (
+                    <div className="empty-state">Brak wiadomości — napisz coś!</div>
+                  )}
+                  {chatMessages.map((msg) => {
+                    if (msg.system && !showSystemMsgs) return null
+                    const time = new Date(msg.sentAt).toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' })
+
+                    // Wiadomość systemowa
+                    if (msg.system) {
+                      return (
+                        <div key={msg.key} className="chat-msg-system">
+                          <span className="chat-msg-system-text">{msg.text}</span>
+                          <span className="chat-msg-time">{time}</span>
+                        </div>
+                      )
+                    }
+
+                    // Prywatna wiadomość — widoczna tylko dla nadawcy, odbiorcy i hosta
+                    if (msg.pmTo) {
+                      const pmVisible = isHost || msg.nick === myNickname || msg.pmTo === myNickname
+                      if (!pmVisible) return null
+                      if (msg.pmTo === myNickname && msg.nick !== myNickname) lastPmSenderRef.current = msg.nick
+                      const pmIsMe = msg.nick === myNickname
+                      return (
+                        <div key={msg.key} className={`chat-msg-pm${pmIsMe ? ' chat-msg-pm-out' : ''}`}>
+                          <div className="chat-msg-header">
+                            <span className="chat-pm-label">{pmIsMe ? `PM → ${msg.pmTo}` : `PM ← ${msg.nick}`}</span>
+                            <span className="chat-msg-time">{time}</span>
+                          </div>
+                          <span className="chat-msg-text">{renderChatText(msg.text)}</span>
+                        </div>
+                      )
+                    }
+
+                    // Wiadomość /me (akcja)
+                    if (msg.me) {
+                      return (
+                        <div key={msg.key} className="chat-msg-action">
+                          <span className="chat-action-text">* {msg.nick} {msg.text}</span>
+                          <span className="chat-msg-time">{time}</span>
+                        </div>
+                      )
+                    }
+
+                    // Zwykła wiadomość
+                    const isMe = msg.nick === myNickname
+                    const isFromHost = msg.nick === hostNick
+                    const listener = sessionListeners.find(l => l.nickname === msg.nick)
+                    const isMod = !isFromHost && listener && listener.canPlay && listener.canSkip && listener.canAdd
+                    const safeNick = msg.nick?.replace(/[.#$[\]]/g, '_')
+                    const muteEntry = chatMuted[safeNick]
+                    const isMuted = muteEntry && (muteEntry.blocked || (muteEntry.until && muteEntry.until > Date.now()))
+                    const muteSecsLeft = muteEntry && !muteEntry.blocked && muteEntry.until
+                      ? Math.max(0, Math.ceil((muteEntry.until - Date.now()) / 1000))
+                      : 0
+                    return (
+                      <div key={msg.key} className={`chat-msg${isMe ? ' chat-msg-me' : ''}${msg.deleted ? ' chat-msg-deleted' : ''}`}>
+                        <div className="chat-msg-header">
+                          {(isFromHost || isMod) && (
+                            <span className={`chat-role-badge ${isFromHost ? 'chat-role-host' : 'chat-role-mod'}`}>
+                              {isFromHost ? 'HOST' : 'MOD'}
+                            </span>
+                          )}
+                          <span className="chat-msg-nick">{isMe ? 'Ty' : msg.nick}</span>
+                          {isMuted && (
+                            <span className="chat-muted-badge" title={muteEntry.blocked ? 'Zablokowany' : `Wyciszony: ${muteSecsLeft}s`}>
+                              {muteEntry.blocked ? '🚫' : `⏱${muteSecsLeft}s`}
+                            </span>
+                          )}
+                          <span className="chat-msg-time">{time}</span>
+                        </div>
+                        <span className="chat-msg-text">
+                          {msg.deleted ? <em className="chat-deleted-text">Usunięte przez hosta</em> : renderChatText(msg.text)}
+                        </span>
+                        {isHost && !isMe && !msg.deleted && (
+                          <div className="chat-mod-actions">
+                            <button className="chat-mod-btn chat-mod-delete" title="Usuń wiadomość" onClick={() => deleteChatMsg(msg.key)}>✕</button>
+                            {isMuted ? (
+                              <button className="chat-mod-btn chat-mod-unmute" title="Odblokuj" onClick={() => unblockChatUser(msg.nick)}>🔊 Odblokuj</button>
+                            ) : (
+                              <>
+                                <button className="chat-mod-btn" title="Wycisz 10s" onClick={() => muteChatUser(msg.nick, 10)}>⏱ 10s</button>
+                                <button className="chat-mod-btn" title="Wycisz 30s" onClick={() => muteChatUser(msg.nick, 30)}>⏱ 30s</button>
+                                <button className="chat-mod-btn chat-mod-block" title="Zablokuj całkowicie" onClick={() => blockChatUser(msg.nick)}>🚫 Blokuj</button>
+                              </>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                  <div ref={chatEndRef} />
+                </div>
+                {(() => {
+                  const myKey = myNickname.replace(/[.#$[\]]/g, '_')
+                  const myMute = chatMuted[myKey]
+                  const blocked = myMute?.blocked
+                  const secsLeft = myMute?.until ? Math.max(0, Math.ceil((myMute.until - Date.now()) / 1000)) : 0
+                  const timedOut = secsLeft > 0
+                  if (blocked) return <div className="chat-muted-info">🚫 Zostałeś zablokowany przez hosta.</div>
+                  if (timedOut) return <div className="chat-muted-info">⏱ Wyciszony przez hosta — jeszcze {secsLeft}s.</div>
+                  return (
+                    <div className="chat-input-area">
+                      {cmdSuggestions.length > 0 && (
+                        <div className="chat-cmd-list" ref={cmdListRef}>
+                          {cmdSuggestions.map((s, i) => (
+                            <div
+                              key={s.nick ? s.name : s.cmd}
+                              className={`chat-cmd-item${i === cmdSuggestIdx ? ' active' : ''}${s.nick ? ' chat-cmd-nick-item' : ''}`}
+                              onMouseDown={(e) => {
+                                e.preventDefault()
+                                if (s.nick) {
+                                  const p = chatInput.trim().split(/\s+/)
+                                  setChatInput(`${p[0]} ${s.name} `)
+                                } else {
+                                  setChatInput(s.argHint ? s.cmd + ' ' : s.cmd)
+                                }
+                                setCmdSuggestions([])
+                                setCmdSuggestIdx(0)
+                              }}
+                            >
+                              {s.nick ? (
+                                <>
+                                  <span className="cmd-nick-icon">👤</span>
+                                  <span className="cmd-nick-name">{s.name}</span>
+                                </>
+                              ) : (
+                                <>
+                                  <span className="cmd-name">{s.cmd}</span>
+                                  {s.argHint && <span className="cmd-arg">{s.argHint}</span>}
+                                  <span className="cmd-desc">{s.desc}</span>
+                                  <span className={`cmd-role cmd-role-${s.role}`}>{s.role === 'host' ? 'HOST' : s.role === 'mod' ? 'MOD' : ''}</span>
+                                </>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <div className="chat-input-row">
+                        <input
+                          className={`chat-input${chatInput.startsWith('/') ? ' chat-input-cmd' : ''}`}
+                          type="text"
+                          placeholder="Wiadomość lub /komenda..."
+                          maxLength={300}
+                          value={chatInput}
+                          onChange={(e) => {
+                            const val = e.target.value
+                            setChatInput(val)
+                            const parts = val.split(/\s+/)
+                            const cmd = parts[0]?.toLowerCase()
+                            // Autocomplete nicku po /msg
+                            if (cmd === '/msg' && val.includes(' ')) {
+                              const prefix = (parts[1] || '').toLowerCase()
+                              const nicks = [...sessionListeners.map(l => l.nickname), hostNick]
+                                .filter(n => n && n !== myNickname && n.toLowerCase().startsWith(prefix))
+                              setCmdSuggestions(nicks.map(n => ({ nick: true, name: n })))
+                              setCmdSuggestIdx(0)
+                              return
+                            }
+                            // Autocomplete komend (brak spacji)
+                            if (val.startsWith('/') && !val.includes(' ')) {
+                              const filtered = CHAT_COMMANDS.filter(c => c.cmd.startsWith(val.toLowerCase()))
+                              setCmdSuggestions(filtered)
+                              setCmdSuggestIdx(0)
+                            } else {
+                              setCmdSuggestions([])
+                            }
+                          }}
+                          onKeyDown={(e) => {
+                            // Nawigacja po liście komend
+                            if (cmdSuggestions.length > 0) {
+                              if (e.key === 'ArrowDown') {
+                                e.preventDefault()
+                                const next = (cmdSuggestIdx + 1) % cmdSuggestions.length
+                                setCmdSuggestIdx(next)
+                                cmdListRef.current?.children[next]?.scrollIntoView({ block: 'nearest' })
+                                return
+                              }
+                              if (e.key === 'ArrowUp') {
+                                e.preventDefault()
+                                const next = (cmdSuggestIdx - 1 + cmdSuggestions.length) % cmdSuggestions.length
+                                setCmdSuggestIdx(next)
+                                cmdListRef.current?.children[next]?.scrollIntoView({ block: 'nearest' })
+                                return
+                              }
+                              if (e.key === 'Tab' || e.key === 'Enter') {
+                                e.preventDefault()
+                                const s = cmdSuggestions[cmdSuggestIdx]
+                                if (s.nick) {
+                                  const p = chatInput.trim().split(/\s+/)
+                                  setChatInput(`${p[0]} ${s.name} `)
+                                } else {
+                                  setChatInput(s.argHint ? s.cmd + ' ' : s.cmd)
+                                }
+                                setCmdSuggestions([])
+                                setCmdSuggestIdx(0)
+                                return
+                              }
+                              if (e.key === 'Escape') { setCmdSuggestions([]); return }
+                            }
+                            // Tab dla uzupełniania nicku (/mute, /unmute)
+                            if (e.key === 'Tab') {
+                              e.preventDefault()
+                              const parts = chatInput.trim().split(/\s+/)
+                              const cmd = parts[0]?.toLowerCase()
+                              if (['/mute', '/unmute'].includes(cmd) && sessionListeners.length > 0) {
+                                const prefix = (parts[1] || '').toLowerCase()
+                                const nicks = sessionListeners.map(l => l.nickname)
+                                const matching = nicks.filter(n => n.toLowerCase().startsWith(prefix))
+                                if (matching.length === 0) return
+                                const idx = matching.indexOf(parts[1] ?? '')
+                                const next = matching[(idx + 1) % matching.length]
+                                setChatInput(`${cmd} ${next}${parts.slice(2).length ? ' ' + parts.slice(2).join(' ') : ''}`)
+                              }
+                              return
+                            }
+                            // Wyślij
+                            if (e.key === 'Enter' && chatInput.trim()) {
+                              if (chatInput.startsWith('/')) handleChatCommand(chatInput)
+                              else sendChatMessage(chatInput)
+                              setChatInput('')
+                              setCmdSuggestions([])
+                            }
+                          }}
+                          onBlur={() => setTimeout(() => setCmdSuggestions([]), 120)}
+                        />
+                        <button
+                          className="chat-send-btn"
+                          disabled={!chatInput.trim()}
+                          onClick={() => {
+                            if (chatInput.startsWith('/')) handleChatCommand(chatInput)
+                            else sendChatMessage(chatInput)
+                            setChatInput('')
+                            setCmdSuggestions([])
+                          }}
+                        >{chatInput.startsWith('/') ? 'Wykonaj' : 'Wyślij'}</button>
+                      </div>
+                    </div>
+                  )
+                })()}
+              </div>
             ) : (mode === 'radio' && radioGardenMode) ? null : (mode === 'radio' ? filteredStations.slice(0, visibleStationCount) : visibleTracks).map((item) => {
               const selected = mode === 'radio' ? currentStation?.id === item.id : currentTrack?.id === item.id
               const flag = mode === 'radio' ? countryFlagEmoji(item.countryCode) : 'YT'
@@ -2912,7 +3506,7 @@ function App() {
               <div ref={stationListSentinelRef} style={{ height: 1 }} />
             )}
 
-            {!(mode === 'radio' && radioGardenMode) && libraryView !== 'suggested' && (mode === 'radio' ? filteredStations : visibleTracks).length === 0 ? (
+            {libraryView !== 'chat' && !(mode === 'radio' && radioGardenMode) && libraryView !== 'suggested' && (mode === 'radio' ? filteredStations : visibleTracks).length === 0 ? (
               <div className="empty-state">
                 {libraryView === 'favorites'
                   ? 'Brak ulubionych w tym trybie.'
@@ -3116,7 +3710,7 @@ function App() {
 
                 <button
                   className="together-modal-create"
-                  onClick={createSession}
+                  onClick={() => { soundCreateSession(); createSession() }}
                   disabled={togetherLoading}
                 >
                   {togetherLoading ? 'Tworzenie...' : 'Utwórz sesję'}
@@ -3171,26 +3765,20 @@ function App() {
                       {sessionListeners.length > 0 && (
                         <div className="together-listeners-list">
                           <p className="together-perm-header">Uprawnienia słuchaczy</p>
-                          {sessionListeners.map(l => (
-                            <div key={l.key} className="together-listener-row">
-                              <span className="together-listener-nick">{l.nickname}</span>
-                              <div className="together-perm-toggles">
-                                {[
-                                  { key: 'canPlay', label: '▶ graj' },
-                                  { key: 'canSkip', label: '⏭ skip' },
-                                  { key: 'canAdd', label: '＋ dodaj' },
-                                ].map(({ key, label }) => (
-                                  <button
-                                    key={key}
-                                    className={`together-perm-btn ${l[key] ? 'active' : ''}`}
-                                    onClick={() => updatePermission(l.key, key, !l[key])}
-                                  >
-                                    {label}
-                                  </button>
-                                ))}
+                          {sessionListeners.map(l => {
+                            const isMod = l.canPlay && l.canSkip && l.canAdd
+                            return (
+                              <div key={l.key} className="together-listener-row">
+                                <span className="together-listener-nick">{l.nickname}</span>
+                                <button
+                                  className={`together-perm-btn ${isMod ? 'active' : ''}`}
+                                  onClick={() => setModerator(l.key, !isMod)}
+                                >
+                                  {isMod ? '★ Moderator' : '☆ Moderator'}
+                                </button>
                               </div>
-                            </div>
-                          ))}
+                            )
+                          })}
                         </div>
                       )}
                     </>
@@ -3205,9 +3793,10 @@ function App() {
                       <div className="together-my-perms">
                         <p className="together-perm-header">Twoje uprawnienia</p>
                         <div className="together-perm-status-row">
-                          <span className={`together-perm-status ${myPermissions.canPlay ? 'on' : 'off'}`}>▶ Graj</span>
-                          <span className={`together-perm-status ${myPermissions.canSkip ? 'on' : 'off'}`}>⏭ Skip</span>
-                          <span className={`together-perm-status ${myPermissions.canAdd ? 'on' : 'off'}`}>＋ Dodaj</span>
+                          {myPermissions.canPlay && myPermissions.canSkip && myPermissions.canAdd
+                            ? <span className="together-perm-status on">★ Moderator</span>
+                            : <span className="together-perm-status off">Brak uprawnień</span>
+                          }
                         </div>
                       </div>
                     </>
@@ -3240,6 +3829,35 @@ function App() {
       </button>
     )}
 
+    {sessionEndedMsg && (() => {
+      const hasDetails = sessionEndedMsg.includes('\n')
+      const [mainMsg, ...detailParts] = sessionEndedMsg.split('\n')
+      const details = detailParts.join('\n')
+      const copyText = `[OnePlayer - błąd sesji]\n${sessionEndedMsg}\nWersja: ${appVersion}\nCzas: ${new Date().toLocaleString('pl-PL')}`
+      return (
+        <div className="session-ended-overlay">
+          <div className="session-ended-modal">
+            <div className="session-ended-icon">⚡</div>
+            <h2 className="session-ended-title">Sesja zakończona</h2>
+            <p className="session-ended-reason">{mainMsg}</p>
+            {hasDetails && (
+              <div className="session-ended-error-box">
+                <span className="session-ended-error-text">{details}</span>
+                <button
+                  className="session-ended-copy"
+                  onClick={() => navigator.clipboard.writeText(copyText)}
+                  title="Skopiuj błąd"
+                >
+                  📋 Kopiuj błąd
+                </button>
+              </div>
+            )}
+            <button className="session-ended-ok" onClick={() => setSessionEndedMsg(null)}>OK</button>
+          </div>
+        </div>
+      )
+    })()}
+
     {mode === 'radio' && pingMs !== null && (
       <div className={`ping-badge-inline ${isRadioVisualLoading ? 'ping-loading' : !isRadioPlaying ? 'ping-paused' : pingMs < 0 ? 'ping-off' : pingMs < 100 ? 'ping-good' : pingMs < 300 ? 'ping-ok' : 'ping-bad'}`}>
         <span className="ping-dot" />
@@ -3248,7 +3866,7 @@ function App() {
         ) : !isRadioPlaying ? (
           <span className="ping-label">⏾ OFF</span>
         ) : (
-          <span className="ping-label">{pingMs < 0 ? '×' : `${pingMs} ms`}</span>
+          <span className="ping-label">{pingMs < 0 ? '×' : `${pingMs >= 1000 ? '999+' : pingMs}ms`}</span>
         )}
       </div>
     )}

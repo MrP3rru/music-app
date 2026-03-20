@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback, useState } from 'react'
-import { ref, set, get, onValue, remove, onDisconnect, push } from 'firebase/database'
+import { ref, set, get, onValue, remove, onDisconnect, push, update } from 'firebase/database'
 import { db } from './firebase'
 
 function generateCode() {
@@ -62,6 +62,10 @@ export function useListenTogether({
   const [sessionError, setSessionError] = useState('')
   const [sessionLoading, setSessionLoading] = useState(false)
   const [suggestions, setSuggestions] = useState([])
+  const [chatMessages, setChatMessages] = useState([])
+  const [chatMuted, setChatMuted] = useState({})
+  const chatMutedRef = useRef({})
+  const [hostNick, setHostNick] = useState(null)
 
   const isHostRef = useRef(false)
   const sessionCodeRef = useRef(null)
@@ -126,6 +130,10 @@ export function useListenTogether({
     setListeners([])
     setMyPermissions(DEFAULT_PERMISSIONS)
     setSuggestions([])
+    setChatMessages([])
+    setChatMuted({})
+    chatMutedRef.current = {}
+    setHostNick(null)
     if (!preserveError) setSessionError('')
   }, [stopListening])
 
@@ -139,7 +147,10 @@ export function useListenTogether({
     unsubRef.current = onValue(sessionRef, (snap) => {
       const data = snap.val()
       if (!data) {
-        setSessionError('Sesja zakończona przez hosta')
+        const reason = isHostRef.current
+          ? 'Sesja zakończona — utracono połączenie z serwerem (Disconnect)'
+          : 'Sesja zakończona — host rozłączył się lub zamknął aplikację'
+        setSessionError(reason)
         leaveSession(true)
         return
       }
@@ -172,6 +183,23 @@ export function useListenTogether({
       } else {
         setSuggestions([])
       }
+
+      // Chat
+      if (data.chat) {
+        const msgs = Object.entries(data.chat).map(([key, msg]) => ({ key, ...msg }))
+        msgs.sort((a, b) => (a.sentAt ?? 0) - (b.sentAt ?? 0))
+        setChatMessages(msgs.slice(-100))
+      } else {
+        setChatMessages([])
+      }
+
+      // Wyciszeni / zablokowani
+      const muted = data.chatMuted ?? {}
+      setChatMuted(muted)
+      chatMutedRef.current = muted
+
+      // Nick hosta
+      if (data.hostNick) setHostNick(data.hostNick)
 
       // lastAction — broadcast od dowolnego uczestnika (host lub gość z uprawnieniami)
       const myId = isHostRef.current ? 'host' : (myListenerKeyRef.current ?? 'unknown')
@@ -271,6 +299,7 @@ if (!isHostRef.current) lastSyncedStationIdRef.current = payload.id
   const createSession = useCallback(async () => {
     setSessionLoading(true)
     setSessionError('')
+    try {
     let code
     for (let i = 0; i < 10; i++) {
       code = generateCode()
@@ -280,6 +309,7 @@ if (!isHostRef.current) lastSyncedStationIdRef.current = payload.id
     const payload = {
       createdAt: Date.now(),
       mode,
+      hostNick: nicknameRef.current || 'Host',
       radio: mode === 'radio' ? stationToPayload(currentStation) : null,
       player: mode === 'player' ? trackToPayload(currentTrack, trackTimeRef?.current ?? 0, isTrackPlaying) : null,
       listeners: {},
@@ -299,35 +329,44 @@ if (!isHostRef.current) lastSyncedStationIdRef.current = payload.id
     setSuggestions([])
     setSessionLoading(false)
     subscribeToSession(code)
+    } catch (err) {
+      setSessionError(`Nie udało się utworzyć sesji — błąd połączenia z Firebase\nSzczegóły: ${err?.message ?? err}`)
+      setSessionLoading(false)
+    }
   }, [mode, currentStation, currentTrack, trackTimeRef, isTrackPlaying, subscribeToSession])
 
   const joinSession = useCallback(async (code) => {
     const cleanCode = code.trim().toUpperCase()
     setSessionLoading(true)
     setSessionError('')
-    const snap = await get(ref(db, `sessions/${cleanCode}`))
-    if (!snap.exists()) {
-      setSessionError('Nie znaleziono sesji — sprawdź kod')
+    try {
+      const snap = await get(ref(db, `sessions/${cleanCode}`))
+      if (!snap.exists()) {
+        setSessionError('Nie znaleziono sesji — sprawdź kod lub sesja już się zakończyła')
+        setSessionLoading(false)
+        return
+      }
+      const listenerRef = push(ref(db, `sessions/${cleanCode}/listeners`))
+      myListenerKeyRef.current = listenerRef.key
+      await set(listenerRef, {
+        joinedAt: Date.now(),
+        nickname: nicknameRef.current?.trim() || 'Gość',
+        canPlay: false,
+        canSkip: false,
+        canAdd: false,
+      })
+      onDisconnect(listenerRef).remove()
+      isHostRef.current = false
+      sessionCodeRef.current = cleanCode
+      setIsHost(false)
+      setSessionCode(cleanCode)
+      setMyPermissions(DEFAULT_PERMISSIONS)
       setSessionLoading(false)
-      return
+      subscribeToSession(cleanCode)
+    } catch (err) {
+      setSessionError(`Nie udało się dołączyć do sesji — błąd połączenia z Firebase\nSzczegóły: ${err?.message ?? err}`)
+      setSessionLoading(false)
     }
-    const listenerRef = push(ref(db, `sessions/${cleanCode}/listeners`))
-    myListenerKeyRef.current = listenerRef.key
-    await set(listenerRef, {
-      joinedAt: Date.now(),
-      nickname: nicknameRef.current?.trim() || 'Gość',
-      canPlay: false,
-      canSkip: false,
-      canAdd: false,
-    })
-    onDisconnect(listenerRef).remove()
-    isHostRef.current = false
-    sessionCodeRef.current = cleanCode
-    setIsHost(false)
-    setSessionCode(cleanCode)
-    setMyPermissions(DEFAULT_PERMISSIONS)
-    setSessionLoading(false)
-    subscribeToSession(cleanCode)
   }, [subscribeToSession])
 
   // Dowolny uczestnik może rozgłosić akcję — klucz mechanizmu synchronizacji gości z uprawnieniami
@@ -344,6 +383,15 @@ if (!isHostRef.current) lastSyncedStationIdRef.current = payload.id
     const code = sessionCodeRef.current
     if (!code || !isHostRef.current) return
     set(ref(db, `sessions/${code}/listeners/${listenerKey}/${perm}`), value)
+  }, [])
+
+  // Host: nadaj/odbierz rolę moderatora (wszystkie 3 uprawnienia naraz)
+  const setModerator = useCallback((listenerKey, value) => {
+    const code = sessionCodeRef.current
+    if (!code || !isHostRef.current) return
+    update(ref(db, `sessions/${code}/listeners/${listenerKey}`), {
+      canPlay: value, canSkip: value, canAdd: value,
+    })
   }, [])
 
   // Host: wyślij pozycję natychmiast po seeku
@@ -421,11 +469,65 @@ if (!isHostRef.current) lastSyncedStationIdRef.current = payload.id
 
   useEffect(() => () => { stopListening() }, [stopListening])
 
+  const sendChatMessage = useCallback((text, me = false, pmTo = null) => {
+    const code = sessionCodeRef.current
+    if (!code || !text.trim()) return
+    const nick = nicknameRef.current || 'Anonim'
+    const safeNick = nick.replace(/[.#$[\]]/g, '_')
+    const mute = chatMutedRef.current?.[safeNick]
+    if (mute?.blocked || (mute?.until && mute.until > Date.now())) return
+    const payload = { nick, text: text.trim(), sentAt: Date.now() }
+    if (me) payload.me = true
+    if (pmTo) payload.pmTo = pmTo
+    push(ref(db, `sessions/${code}/chat`), payload)
+  }, [])
+
+  const sendSystemMessage = useCallback((text) => {
+    const code = sessionCodeRef.current
+    if (!code) return
+    push(ref(db, `sessions/${code}/chat`), { nick: '_system_', text, sentAt: Date.now(), system: true })
+  }, [])
+
+  const clearChat = useCallback(() => {
+    const code = sessionCodeRef.current
+    if (!code || !isHostRef.current) return
+    remove(ref(db, `sessions/${code}/chat`))
+  }, [])
+
+  const deleteChatMsg = useCallback((key) => {
+    const code = sessionCodeRef.current
+    if (!code) return
+    set(ref(db, `sessions/${code}/chat/${key}/deleted`), true)
+  }, [])
+
+  const muteChatUser = useCallback((nick, seconds) => {
+    const code = sessionCodeRef.current
+    if (!code) return
+    const safeNick = nick.replace(/[.#$[\]]/g, '_')
+    set(ref(db, `sessions/${code}/chatMuted/${safeNick}`), { until: Date.now() + seconds * 1000, blocked: false, nick })
+  }, [])
+
+  const blockChatUser = useCallback((nick) => {
+    const code = sessionCodeRef.current
+    if (!code) return
+    const safeNick = nick.replace(/[.#$[\]]/g, '_')
+    set(ref(db, `sessions/${code}/chatMuted/${safeNick}`), { blocked: true, until: 0, nick })
+  }, [])
+
+  const unblockChatUser = useCallback((nick) => {
+    const code = sessionCodeRef.current
+    if (!code) return
+    const safeNick = nick.replace(/[.#$[\]]/g, '_')
+    remove(ref(db, `sessions/${code}/chatMuted/${safeNick}`))
+  }, [])
+
   return {
     sessionCode, isHost, listenerCount, listeners, myPermissions,
     sessionError, sessionLoading, inSession: !!sessionCode,
     suggestions, createSession, joinSession, leaveSession,
     suggestTrack, removeSuggestion, syncPositionNow,
-    updatePermission, notifyAction,
+    updatePermission, setModerator, notifyAction,
+    chatMessages, sendChatMessage, sendSystemMessage, clearChat, chatMuted, hostNick,
+    deleteChatMsg, muteChatUser, blockChatUser, unblockChatUser,
   }
 }

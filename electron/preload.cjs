@@ -2,6 +2,7 @@ const { contextBridge, ipcRenderer } = require('electron')
 
 contextBridge.exposeInMainWorld('playerBridge', {
   searchYoutube: (query, options) => ipcRenderer.invoke('youtube:search', query, options),
+  getVideoById: (videoId) => ipcRenderer.invoke('youtube:video-by-id', videoId),
   getRadioNowPlaying: (payload) => ipcRenderer.invoke('radio:now-playing', payload),
   updateDiscordPresence: (data) => ipcRenderer.invoke('discord:update-presence', data),
   clearDiscordPresence: () => ipcRenderer.invoke('discord:clear-presence'),
