@@ -25,3 +25,6 @@ dist-ssr
 
 # Lokalny skrypt dewelopera
 push.bat
+
+# Claude Code (lokalny config, historia konwersacji)
+.claude/
