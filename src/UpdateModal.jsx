@@ -6,6 +6,7 @@ export default function UpdateModal({ updateInfo, onDismiss }) {
   const [downloaded, setDownloaded] = useState(0)
   const [total, setTotal] = useState(0)
   const [errorMsg, setErrorMsg] = useState('')
+  const [countdown, setCountdown] = useState(5)
   const listenerSet = useRef(false)
 
   useEffect(() => {
@@ -30,6 +31,13 @@ export default function UpdateModal({ updateInfo, onDismiss }) {
       setErrorMsg(err?.message || 'Nieznany błąd podczas aktualizacji')
     }
   }
+
+  useEffect(() => {
+    if (state !== 'done') return
+    if (countdown <= 0) { window.playerBridge?.restartApp(); return }
+    const t = setTimeout(() => setCountdown(c => c - 1), 1000)
+    return () => clearTimeout(t)
+  }, [state, countdown])
 
   function handleRestart() {
     window.playerBridge?.restartApp()
@@ -97,7 +105,7 @@ export default function UpdateModal({ updateInfo, onDismiss }) {
               Zainstalowano pomyślnie
             </p>
             <button className="update-btn-restart" onClick={handleRestart}>
-              Zrestartuj aplikację
+              Restart za {countdown}s
             </button>
           </div>
         )}

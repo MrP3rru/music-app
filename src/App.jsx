@@ -703,16 +703,48 @@ function buildFavoriteEntry(type, item, genreId) {
   }
 }
 
+function getStationGradientArt(name) {
+  let hash = 0
+  for (let i = 0; i < (name || '').length; i++) {
+    hash = ((hash << 5) - hash) + name.charCodeAt(i)
+    hash |= 0
+  }
+  const hue = Math.abs(hash) % 360
+  const light = `hsl(${hue},55%,58%)`
+  const dark  = `hsl(${hue},65%,20%)`
+
+  // Split name into max 2 lines of ~12 chars each
+  const label = (name || 'Radio').trim()
+  const words = label.split(/\s+/)
+  const lines = []
+  let cur = ''
+  for (const word of words) {
+    const chunk = word.slice(0, 13)
+    if (!cur) { cur = chunk }
+    else if ((cur + ' ' + chunk).length <= 13) { cur += ' ' + chunk }
+    else { lines.push(cur); if (lines.length >= 2) break; cur = chunk }
+  }
+  if (cur && lines.length < 2) lines.push(cur)
+
+  const baseY = lines.length === 1 ? 44 : 37
+  const textEls = lines.map((line, i) =>
+    `<text x="40" y="${baseY + i * 15}" text-anchor="middle" dominant-baseline="middle" font-family="system-ui,sans-serif" font-size="10.5" font-weight="700" fill="rgba(255,255,255,0.82)" letter-spacing="0.3">${line}</text>`
+  ).join('')
+
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"><defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${light}"/><stop offset="100%" stop-color="${dark}"/></linearGradient></defs><rect width="80" height="80" fill="url(#g)"/>${textEls}</svg>`
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`
+}
+
 function getPlaceholderArt(label, type) {
-  const safeLabel = encodeURIComponent((label || (type === 'radio' ? 'Radio' : 'Track')).slice(0, 18))
-  const palette = type === 'radio' ? '11243b/ff9f68' : '1c1d3c/ffd36e'
-  return `https://placehold.co/320x320/${palette}?text=${safeLabel}`
+  if (type === 'radio') return getStationGradientArt(label)
+  const safeLabel = encodeURIComponent((label || 'Track').slice(0, 18))
+  return `https://placehold.co/320x320/1c1d3c/ffd36e?text=${safeLabel}`
 }
 
 function withFallbackArt(event, label, type) {
   const target = event.currentTarget
   const failed = target.src
-  if (failed && !failed.startsWith('https://placehold.co')) {
+  if (failed && !failed.startsWith('https://placehold.co') && !failed.startsWith('data:')) {
     failedImageUrls.add(failed)
   }
   target.onerror = null
@@ -768,10 +800,7 @@ const LibraryItem = memo(function LibraryItem({ item, selected, mode, activeTrac
           src={art}
           alt=""
           loading="lazy"
-          onError={(e) => {
-            e.target.onerror = null
-            e.target.style.display = 'none'
-          }}
+          onError={(e) => withFallbackArt(e, mode === 'radio' ? item.name : item.title, mode === 'radio' ? 'radio' : 'track')}
         />
         <span className="flag-badge small">{flag}</span>
       </div>
@@ -966,9 +995,43 @@ function App() {
   })
   // Inicjalizacja currentStation z localStorage jeśli istnieje
   const [favorites, setFavorites] = useState(loadStoredFavorites)
-  const [clockTime, setClockTime] = useState(() => new Date())
+  // ─── Adaptacyjne FPS: 60 aktywna, 30 nieaktywna, 10 ukryta ─────────────────
+  const fpsRef = useRef(60)
   useEffect(() => {
-    const t = setInterval(() => setClockTime(new Date()), 1000)
+    const update = () => {
+      if (document.visibilityState === 'hidden') {
+        fpsRef.current = 10
+        document.documentElement.classList.add('page-hidden')
+      } else {
+        fpsRef.current = document.hasFocus() ? 60 : 30
+        document.documentElement.classList.remove('page-hidden')
+      }
+    }
+    const onFocus = () => { if (document.visibilityState !== 'hidden') { fpsRef.current = 60; document.documentElement.classList.remove('page-hidden') } }
+    const onBlur  = () => { if (document.visibilityState !== 'hidden') fpsRef.current = 30 }
+    document.addEventListener('visibilitychange', update)
+    window.addEventListener('focus', onFocus)
+    window.addEventListener('blur',  onBlur)
+    return () => {
+      document.removeEventListener('visibilitychange', update)
+      window.removeEventListener('focus', onFocus)
+      window.removeEventListener('blur',  onBlur)
+    }
+  }, [])
+
+  // ─── Zegar — bezpośrednia aktualizacja DOM (bez re-renderu całej apki) ──────
+  const clockHmRef   = useRef(null)
+  const clockSRef    = useRef(null)
+  const clockDateRef = useRef(null)
+  useEffect(() => {
+    const update = () => {
+      const now = new Date()
+      if (clockHmRef.current)   clockHmRef.current.textContent   = now.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' })
+      if (clockSRef.current)    clockSRef.current.textContent    = ':' + now.getSeconds().toString().padStart(2, '0')
+      if (clockDateRef.current) clockDateRef.current.textContent = now.toLocaleDateString('pl-PL', { weekday: 'long', day: 'numeric', month: 'long' })
+    }
+    update()
+    const t = setInterval(update, 1000)
     return () => clearInterval(t)
   }, [])
 
@@ -1127,8 +1190,13 @@ function App() {
 
     let smooth = 0
     let raf
+    let lastFrame = 0
 
-    const draw = () => {
+    const draw = (ts = 0) => {
+      const interval = 1000 / fpsRef.current
+      if (ts - lastFrame < interval) { raf = requestAnimationFrame(draw); return }
+      lastFrame = ts
+
       const w = canvas.offsetWidth
       const h = canvas.offsetHeight
       ctx.clearRect(0, 0, w, h)
@@ -1159,23 +1227,25 @@ function App() {
     }
 
     const resize = () => {
-      const dpr = devicePixelRatio
-      canvas.width = canvas.offsetWidth * dpr
-      canvas.height = canvas.offsetHeight * dpr
+      const dpr = Math.min(devicePixelRatio, 2)
+      canvas.width  = Math.round(canvas.offsetWidth  * dpr)
+      canvas.height = Math.round(canvas.offsetHeight * dpr)
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     }
 
     resize()
-    draw()
+    raf = requestAnimationFrame(draw)
 
     const ro = new ResizeObserver(resize)
     ro.observe(canvas)
+    window.addEventListener('resize', resize)
 
     return () => {
       cancelAnimationFrame(raf)
       ro.disconnect()
+      window.removeEventListener('resize', resize)
     }
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Tło aplikacji — orby reagujące na energię muzyki ───────────────────────
   useEffect(() => {
@@ -1186,6 +1256,7 @@ function App() {
     // 16 małych orbów rozsianych po całym ekranie
     // hue: odcień startowy (°), hs: prędkość dryftu odcienia, sz: rozmiar bazowy
     const blobs = [
+      // — ciepłe pomarańcze (oryginalne) —
       { x: 0.10, y: 0.08, vx:  0.00030, vy:  0.00020, hue: 20,  hs:  0.008, sz: 0.22 },
       { x: 0.50, y: 0.05, vx: -0.00025, vy:  0.00015, hue: 35,  hs: -0.006, sz: 0.17 },
       { x: 0.90, y: 0.12, vx: -0.00028, vy:  0.00022, hue: 25,  hs:  0.010, sz: 0.19 },
@@ -1202,45 +1273,52 @@ function App() {
       { x: 0.30, y: 0.92, vx:  0.00021, vy: -0.00024, hue: 17,  hs: -0.006, sz: 0.20 },
       { x: 0.62, y: 0.95, vx: -0.00018, vy: -0.00020, hue: 24,  hs:  0.009, sz: 0.17 },
       { x: 0.92, y: 0.88, vx: -0.00020, vy: -0.00015, hue: 28,  hs: -0.007, sz: 0.19 },
+      // — dodatkowe kolory rozsiane po kole barw —
+      { x: 0.35, y: 0.15, vx:  0.00017, vy:  0.00023, hue: 80,  hs:  0.008, sz: 0.18 }, // żółto-zielony
+      { x: 0.74, y: 0.08, vx: -0.00022, vy:  0.00018, hue: 140, hs: -0.007, sz: 0.20 }, // soczysty zielony
+      { x: 0.08, y: 0.35, vx:  0.00025, vy:  0.00014, hue: 170, hs:  0.009, sz: 0.17 }, // mięta / teal
+      { x: 0.55, y: 0.38, vx: -0.00019, vy: -0.00021, hue: 195, hs: -0.008, sz: 0.21 }, // cyjan
+      { x: 0.83, y: 0.22, vx:  0.00021, vy:  0.00016, hue: 220, hs:  0.006, sz: 0.19 }, // niebieski
+      { x: 0.25, y: 0.60, vx: -0.00016, vy:  0.00024, hue: 245, hs: -0.009, sz: 0.22 }, // indygo
+      { x: 0.58, y: 0.68, vx:  0.00023, vy: -0.00017, hue: 270, hs:  0.010, sz: 0.18 }, // fiolet
+      { x: 0.42, y: 0.88, vx: -0.00020, vy: -0.00022, hue: 300, hs: -0.007, sz: 0.20 }, // magenta
+      { x: 0.70, y: 0.85, vx:  0.00018, vy:  0.00019, hue: 325, hs:  0.008, sz: 0.17 }, // różowy
+      { x: 0.12, y: 0.90, vx:  0.00024, vy: -0.00013, hue: 350, hs: -0.006, sz: 0.19 }, // malinowy / czerwony
     ]
 
     let smooth = 0
     let beat = 0
     let raf
+    let lastFrame = 0
 
-    const draw = () => {
-      if (document.visibilityState === 'hidden') { raf = requestAnimationFrame(draw); return }
+    const draw = (ts = 0) => {
+      const interval = 1000 / fpsRef.current
+      if (ts - lastFrame < interval) { raf = requestAnimationFrame(draw); return }
+      lastFrame = ts
+
       const w = canvas.offsetWidth
       const h = canvas.offsetHeight
       ctx.clearRect(0, 0, w, h)
 
       const raw = electricEnergyRef.current || 0
-      // Asymetryczny lerp: szybki atak, wolny decay
       smooth += (raw - smooth) * (raw > smooth ? 0.10 : 0.04)
-      // Beat: bardzo szybki atak — uderza na każdym bicie, potem opada
-      beat += (raw - beat) * (raw > beat ? 0.45 : 0.07)
+      beat   += (raw - beat)   * (raw > beat   ? 0.45 : 0.07)
 
-      // screen: orby dodają swoje kolory jak światło — nakładki rozjaśniają
-      // Przezroczystość i blur kart — rośnie gdy gra muzyka (frosted-glass, tło przebija)
-      document.documentElement.style.setProperty('--card-alpha', (0.76 - smooth * 0.42).toFixed(3))
-      document.documentElement.style.setProperty('--card-blur', `${(22 + smooth * 20).toFixed(1)}px`)
-      document.documentElement.style.setProperty('--item-bg-alpha', (1.0 - smooth * 0.58).toFixed(3))
+      document.documentElement.style.setProperty('--card-alpha',    (0.76 - smooth * 0.42).toFixed(3))
+      document.documentElement.style.setProperty('--card-blur',     `${(22 + smooth * 20).toFixed(1)}px`)
+      document.documentElement.style.setProperty('--item-bg-alpha', (1.0  - smooth * 0.58).toFixed(3))
 
       ctx.globalCompositeOperation = 'screen'
 
       blobs.forEach((b) => {
-        // Ruch przyspiesza z energią
         const speedMul = 1 + smooth * 3.5
         b.x += b.vx * speedMul; b.y += b.vy * speedMul
         if (b.x < -0.12 || b.x > 1.12) b.vx *= -1
         if (b.y < -0.12 || b.y > 1.12) b.vy *= -1
 
-        // Powolny dryft odcienia + energia przesuwa z pomarańczowego → fioletowy/różowy
         b.hue = ((b.hue + b.hs + 360) % 360)
         const hue    = ((b.hue - smooth * 90 + 360) % 360)
-        // Rozmiar: płynny wzrost z smooth + pulsowanie na bitach
         const radius = Math.min(w, h) * (b.sz + smooth * 0.18 + beat * 0.14)
-        // Jasność: mocniejsza i bardziej pulsująca
         const alpha  = 0.06 + smooth * 0.38 + beat * 0.28
 
         const g = ctx.createRadialGradient(b.x * w, b.y * h, 0, b.x * w, b.y * h, radius)
@@ -1257,17 +1335,18 @@ function App() {
 
     const resize = () => {
       const dpr = Math.min(devicePixelRatio, 2)
-      canvas.width  = canvas.offsetWidth  * dpr
-      canvas.height = canvas.offsetHeight * dpr
+      canvas.width  = Math.round(canvas.offsetWidth  * dpr)
+      canvas.height = Math.round(canvas.offsetHeight * dpr)
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     }
 
     resize()
-    draw()
+    raf = requestAnimationFrame(draw)
     const ro = new ResizeObserver(resize)
     ro.observe(canvas)
-    return () => { cancelAnimationFrame(raf); ro.disconnect() }
-  }, [])
+    window.addEventListener('resize', resize)
+    return () => { cancelAnimationFrame(raf); ro.disconnect(); window.removeEventListener('resize', resize) }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Thumbar — ref zawsze aktualny, listenerzy rejestrują się raz ─────────
   const thumbarActionsRef = useRef({})
@@ -1286,6 +1365,7 @@ function App() {
     // Tryb tła — wyłącz ciężkie animacje CSS gdy okno nie jest aktywne
     window.playerBridge.onAppBackground?.((isBackground) => {
       document.documentElement.classList.toggle('app-background', isBackground)
+      if (isBackground) { fpsRef.current = 10 } else if (document.visibilityState !== 'hidden') { fpsRef.current = document.hasFocus() ? 60 : 30 }
     })
   }, [])
 
@@ -1514,20 +1594,49 @@ function App() {
     if (!el) return
     let target = el.scrollTop
     let raf = null
+    let scrollbarDragging = false
+
+    const step = () => {
+      const diff = target - el.scrollTop
+      if (Math.abs(diff) < 1) { el.scrollTop = target; raf = null; return }
+      el.scrollTop += diff * 0.18
+      raf = requestAnimationFrame(step)
+    }
+
     const onWheel = (e) => {
       e.preventDefault()
       target = Math.max(0, Math.min(el.scrollHeight - el.clientHeight, target + e.deltaY * 1.5))
       if (raf) return
-      const step = () => {
-        const diff = target - el.scrollTop
-        if (Math.abs(diff) < 1) { el.scrollTop = target; raf = null; return }
-        el.scrollTop += diff * 0.18
-        raf = requestAnimationFrame(step)
-      }
       raf = requestAnimationFrame(step)
     }
+
+    // Wykryj kliknięcie na scrollbarze (jest za clientWidth)
+    const onPointerDown = (e) => {
+      if (e.offsetX > el.clientWidth) {
+        scrollbarDragging = true
+        if (raf) { cancelAnimationFrame(raf); raf = null }
+        target = el.scrollTop
+      }
+    }
+    const onPointerUp = () => { scrollbarDragging = false }
+
+    // Sync target gdy natywny scroll (klawiatura, touch, scrollbar drag)
+    const onScroll = () => {
+      if (scrollbarDragging) { target = el.scrollTop; return }
+      // wheel-driven scroll: target już ustawiony, ignoruj
+    }
+
     el.addEventListener('wheel', onWheel, { passive: false })
-    return () => { el.removeEventListener('wheel', onWheel); if (raf) cancelAnimationFrame(raf) }
+    el.addEventListener('scroll', onScroll, { passive: true })
+    el.addEventListener('pointerdown', onPointerDown)
+    document.addEventListener('pointerup', onPointerUp)
+    return () => {
+      el.removeEventListener('wheel', onWheel)
+      el.removeEventListener('scroll', onScroll)
+      el.removeEventListener('pointerdown', onPointerDown)
+      document.removeEventListener('pointerup', onPointerUp)
+      if (raf) cancelAnimationFrame(raf)
+    }
   }, [])
 
   // Auto-przesuń stronę gdy aktywny utwór jest poza widocznym zakresem
@@ -3134,7 +3243,7 @@ function App() {
       <ReactPlayer
         key="main-player"
         ref={playerRef}
-        src={currentTrack?.url ?? null}
+        src={mode === 'player' ? (currentTrack?.url ?? null) : null}
         playing={mode === 'player' && isTrackPlaying && !!currentTrack?.url}
         controls={false}
         width="1px" height="1px"
@@ -3260,7 +3369,7 @@ function App() {
                 )}
                 {mode === 'radio' && currentStation && (
                   <div className="radio-track-timeline">
-                    <p className="stage-nowplaying">
+                    <p key={radioNowPlaying} className="stage-nowplaying">
                       {radioNowPlaying ? (
                         <>
                           Teraz gra: {radioNowPlaying}
@@ -3272,12 +3381,10 @@ function App() {
                         </>
                       ) : 'Teraz gra: brak metadanych od stacji'}
                     </p>
-                    {radioPlayHistory.length > 0 && (
-                      <p className="radio-track-prev">
-                        <span className="radio-track-prev-label">Wcześniej grało: </span>
-                        {radioPlayHistory[0]}
-                      </p>
-                    )}
+                    <p className={`radio-track-prev${radioPlayHistory.length === 0 ? ' radio-track-prev--empty' : ''}`}>
+                      <span className="radio-track-prev-label">Wcześniej grało: </span>
+                      {radioPlayHistory[0] || ''}
+                    </p>
                   </div>
                 )}
               </div>
@@ -3303,15 +3410,11 @@ function App() {
             <canvas ref={vizBgCanvasRef} className="viz-bg-canvas" />
             <div className="stage-clock">
               <div className="stage-clock-left">
-                <span className="stage-clock-hm">
-                  {clockTime.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' })}
-                </span>
-                <span className="stage-clock-s">:{clockTime.getSeconds().toString().padStart(2, '0')}</span>
+                <span ref={clockHmRef} className="stage-clock-hm" />
+                <span ref={clockSRef}  className="stage-clock-s"  />
               </div>
               <span className="stage-clock-sep" />
-              <span className="stage-clock-date">
-                {clockTime.toLocaleDateString('pl-PL', { weekday: 'long', day: 'numeric', month: 'long' })}
-              </span>
+              <span ref={clockDateRef} className="stage-clock-date" />
               {weather && (
                 <>
                   <span className="stage-clock-sep" />
@@ -3611,8 +3714,17 @@ function App() {
                             setShowSuggestions(false)
                           }}
                         >
-                          <span className="suggestion-title">{s.title}</span>
-                          <span className="suggestion-author">{s.author}</span>
+                          <img
+                            className="suggestion-art"
+                            src={safeArt(s.thumbnail, s.title, 'track')}
+                            alt=""
+                            onError={(e) => withFallbackArt(e, s.title, 'track')}
+                          />
+                          <div className="suggestion-copy">
+                            <span className="suggestion-title">{s.title}</span>
+                            <span className="suggestion-author">{s.author}</span>
+                          </div>
+                          {s.duration && <span className="suggestion-duration">{s.duration}</span>}
                         </button>
                       ))}
                     </div>
@@ -4580,32 +4692,36 @@ function App() {
       </div>
     )}
 
-    <MonopolyGame
-      open={monopolyOpen}
-      onClose={() => setMonopolyOpen(false)}
-      sessionCode={sessionCode}
-      myNickname={myNickname}
-      isHost={isHost}
-      initialPlayers={monopolyPlayers}
-      gameDurationSeconds={monopolyDuration}
-      nowPlayingName={mode === 'radio' ? currentStation?.name : currentTrack?.title}
-      nowPlayingMode={mode}
-    />
+    {monopolyOpen && (
+      <MonopolyGame
+        open={monopolyOpen}
+        onClose={() => setMonopolyOpen(false)}
+        sessionCode={sessionCode}
+        myNickname={myNickname}
+        isHost={isHost}
+        initialPlayers={monopolyPlayers}
+        gameDurationSeconds={monopolyDuration}
+        nowPlayingName={mode === 'radio' ? currentStation?.name : currentTrack?.title}
+        nowPlayingMode={mode}
+      />
+    )}
 
-    <GameLobby
-      open={gameLobbyOpen}
-      onClose={() => setGameLobbyOpen(false)}
-      sessionCode={sessionCode}
-      myNickname={myNickname}
-      isHost={isHost}
-      gameState={gameState}
-      onStartGame={(players, duration) => {
-        setGameState('playing')
-        setMonopolyPlayers(players)
-        setMonopolyDuration(duration ?? 7200)
-        setMonopolyOpen(true)
-      }}
-    />
+    {gameLobbyOpen && (
+      <GameLobby
+        open={gameLobbyOpen}
+        onClose={() => setGameLobbyOpen(false)}
+        sessionCode={sessionCode}
+        myNickname={myNickname}
+        isHost={isHost}
+        gameState={gameState}
+        onStartGame={(players, duration) => {
+          setGameState('playing')
+          setMonopolyPlayers(players)
+          setMonopolyDuration(duration ?? 7200)
+          setMonopolyOpen(true)
+        }}
+      />
+    )}
 
     {showSizePanel && createPortal(
       <div className="size-panel">

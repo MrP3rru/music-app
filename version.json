@@ -1,7 +1,28 @@
 {
-  "version": "1.9.0",
-  "changelog": "Zegarek z pogodą, info-strip, presencja online, przezroczystość kart, fix synchronizacji ListenTogether.",
+  "version": "2.0.0",
+  "changelog": "Nowe kolory orbów tła, gradienty stacji radiowych z nazwą, podpowiedzi wyszukiwania przeprojektowane, ikona aplikacji w Task Managerze, naprawki scrollbara i animacji.",
   "history": [
+    {
+      "version": "2.0.0",
+      "date": "2026-04-01",
+      "changes": [
+        "Tło aplikacji — 10 nowych orbów z kolorami z całego kręgu barw (zielony, miętowy, cyjan, niebieski, indygo, fiolet, magenta, różowy, malinowy, żółto-zielony)",
+        "Placeholdery stacji radiowych — każda stacja bez okładki ma unikalny gradient kolorystyczny (generowany z nazwy) z widoczną nazwą stacji",
+        "Podpowiedzi wyszukiwania — całkowity redesign: ciemne tło, neutralne kolory zamiast pomarańczowego, niebieski akcent przy najechaniu, płynna animacja wjazdu",
+        "Naprawiono pomarańczowe tło podpowiedzi — błąd w selektorze CSS .search-row button (zmieniono na .search-row > button)",
+        "Wcześniej grało — sekcja rezerwuje miejsce przez cały czas (visibility: hidden zamiast conditional render) — brak skoku layoutu przy pojawieniu się tekstu",
+        "Animacja Teraz gra — tekst płynnie wjeżdża przy każdej zmianie stacji/piosenki",
+        "Dolny pasek — marquee przewija się tylko po najechaniu myszką",
+        "Górny marquee — wolniejszy (22s zamiast 14s)",
+        "Okno aktualizacji — długa lista zmian jest teraz przewijalna, modal nie wychodzi poza ekran",
+        "Ikona aplikacji w Task Managerze — podmieniona ikona i nazwa (Music App) w electron.exe przez patch-icon.cjs",
+        "Nazwa aplikacji w menedżerze zadań i pasku zadań zmieniona na Music App",
+        "Vite overlay błędów wyłączony (server.hmr.overlay: false) — czerwony ekran nie pojawia się podczas aktualizacji",
+        "Animacje tła i treści działają poprawnie gdy aplikacja jest na drugim monitorze bez fokusu",
+        "Naprawiono scrollbar w liście źródeł — przeciąganie nie cofa już do poprzedniej pozycji",
+        "Wyłączono background throttling Chromium (disable-renderer-backgrounding) dla płynnego działania na drugim monitorze"
+      ]
+    },
     {
       "version": "1.9.0",
       "date": "2026-03-29",

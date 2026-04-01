@@ -1,7 +1,18 @@
-/* ── Tryb tła — wyłącz ciężkie animacje gdy okno nieaktywne ─────────────────── */
-html.app-background *,
-html.app-background *::before,
-html.app-background *::after {
+/* ── Tryb tła — pausuj TYLKO ciężkie animacje wizualne, nie treściowe ────────── */
+html.app-background .title-track,
+html.app-background .marquee-track,
+html.app-background .player-viz-bars span,
+html.app-background .player-viz-ring,
+html.app-background .radio-pulse.playing .radio-viz-glow,
+html.app-background .electric-border-svg,
+html.app-background .eq-bar {
+  animation-play-state: paused !important;
+}
+
+/* ── Okno całkowicie ukryte — pausuj wszystko ────────────────────────────────── */
+html.page-hidden *,
+html.page-hidden *::before,
+html.page-hidden *::after {
   animation-play-state: paused !important;
   transition: none !important;
 }
@@ -135,7 +146,7 @@ html.app-background *::after {
 .segmented-control button,
 .genre-pills button,
 .player-button,
-.search-row button,
+.search-row > button,
 .library-item,
 .country-filter select,
 .accent {
@@ -163,7 +174,7 @@ html.app-background *::after {
 .segmented-control button.active,
 .genre-pills button.active,
 .player-button.primary,
-.search-row button,
+.search-row > button,
 .accent.active {
   background: linear-gradient(135deg, #ff7b39, #ffb05c);
   color: #09111b;
@@ -476,7 +487,7 @@ html.app-background *::after {
   display: flex;
   gap: 28px;
   width: max-content;
-  animation: title-slide 14s ease-in-out infinite;
+  animation: title-slide 22s ease-in-out infinite;
   will-change: transform;
 }
 
@@ -486,6 +497,12 @@ html.app-background *::after {
   white-space: nowrap;
 }
 
+.title-marquee.compact .title-track {
+  animation-play-state: paused;
+}
+.title-marquee.compact:hover .title-track {
+  animation-play-state: running;
+}
 .title-marquee.compact .title-track span {
   font-size: 0.95rem;
 }
@@ -520,6 +537,11 @@ html.app-background *::after {
   animation: track-fade-in 0.5s ease;
 }
 
+.radio-track-prev--empty {
+  visibility: hidden;
+  animation: none;
+}
+
 .radio-track-prev-label {
   color: rgba(242, 245, 247, 0.22);
   font-size: 0.7rem;
@@ -537,6 +559,7 @@ html.app-background *::after {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  animation: track-fade-in 0.4s ease;
 }
 
 .radio-track-timeline .stage-nowplaying {
@@ -1195,6 +1218,7 @@ html.app-background *::after {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+  justify-content: center;
 }
 
 .search-panel label,
@@ -1248,7 +1272,7 @@ html.app-background *::after {
   box-shadow: 0 0 0 3px rgba(255, 145, 76, 0.18);
 }
 
-.search-row button {
+.search-row > button {
   min-height: 40px;
   padding: 0 16px;
   border-radius: 999px;
@@ -1672,45 +1696,104 @@ html.app-background *::after {
 
 .search-suggestions {
   position: absolute;
-  top: calc(100% + 4px);
+  top: calc(100% + 5px);
   left: 0;
   right: 0;
-  background: #1a1a2e;
-  border: 1px solid rgba(255, 123, 57, 0.3);
-  border-radius: 12px;
-  overflow: hidden;
-  z-index: 100;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  background: #0d1521;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 8px;
+  z-index: 200;
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.75), 0 4px 12px rgba(0, 0, 0, 0.4);
+  max-height: 360px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
+  animation: suggestions-drop 0.14s ease;
 }
+
+@keyframes suggestions-drop {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.search-suggestions::-webkit-scrollbar { width: 3px; }
+.search-suggestions::-webkit-scrollbar-track { background: transparent; }
+.search-suggestions::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 0; }
+.search-suggestions::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.22); }
 
 .suggestion-item {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
+  align-items: center;
+  gap: 12px;
   width: 100%;
-  padding: 8px 12px;
+  padding: 9px 14px;
   background: transparent;
+  color: inherit;
   border: none;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
   cursor: pointer;
   text-align: left;
-  gap: 2px;
+  transition: background 0.12s;
+  border-radius: 0;
+  position: relative;
+}
+.suggestion-item::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 2px;
+  background: #5b8df0;
+  transform: scaleY(0);
+  transform-origin: center;
+  transition: transform 0.12s ease;
 }
 .suggestion-item:last-child { border-bottom: none; }
-.suggestion-item:hover { background: rgba(255, 123, 57, 0.12); }
+.suggestion-item:hover { background: rgba(255, 255, 255, 0.04); }
+.suggestion-item:hover::before { transform: scaleY(1); }
+
+.suggestion-art {
+  width: 44px;
+  height: 44px;
+  border-radius: 4px;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.suggestion-copy {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
 
 .suggestion-title {
   font-size: 13px;
-  color: rgba(255, 255, 255, 0.9);
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.92);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  width: 100%;
+  line-height: 1.3;
 }
 
 .suggestion-author {
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.45);
+  font-size: 11.5px;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.38);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.suggestion-duration {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.35);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+  letter-spacing: 0.02em;
 }
 
 .bottom-player {
@@ -2754,10 +2837,12 @@ html.app-background *::after {
   padding: 32px 36px 28px;
   width: 380px;
   max-width: 90vw;
+  max-height: calc(100vh - 80px);
   box-shadow: 0 24px 60px rgba(0,0,0,0.6);
   display: flex;
   flex-direction: column;
   gap: 12px;
+  overflow: hidden;
 }
 .update-modal-header {
   display: flex;
@@ -2790,6 +2875,11 @@ html.app-background *::after {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  max-height: 200px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.18) transparent;
+  flex-shrink: 1;
 }
 .update-actions {
   display: flex;

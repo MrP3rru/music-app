@@ -31,6 +31,9 @@ if not exist "node_modules" (
   )
 )
 
+echo [INFO] Ustawianie ikony aplikacji...
+node electron\patch-icon.cjs
+
 echo [INFO] Uruchamianie aplikacji desktop...
 call npm run dev:desktop
 

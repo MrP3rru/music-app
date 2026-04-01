@@ -1,5 +1,10 @@
 const { contextBridge, ipcRenderer } = require('electron')
 
+// Suppress uncaught renderer errors so Electron's red error bar never shows to users.
+// Errors are still logged to the DevTools console for debugging.
+window.onerror = () => true
+window.addEventListener('unhandledrejection', (e) => { e.preventDefault() })
+
 contextBridge.exposeInMainWorld('playerBridge', {
   searchYoutube: (query, options) => ipcRenderer.invoke('youtube:search', query, options),
   getVideoById: (videoId) => ipcRenderer.invoke('youtube:video-by-id', videoId),

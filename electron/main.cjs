@@ -1,6 +1,16 @@
 
 const { app, BrowserWindow, ipcMain, shell, session, desktopCapturer, nativeImage, nativeTheme } = require('electron')
 
+// ─── Nazwa i ikona — MUSI być przed ready, inaczej Windows ignoruje ──────────
+app.setName('Music App')
+app.setAppUserModelId('com.mateu.musicapp')
+
+// ─── Wyłącz throttling animacji/timerów gdy okno nie jest sfokusowane ────────
+// Bez tego Chromium wstrzymuje CSS animacje na drugim monitorze / w tle
+app.commandLine.appendSwitch('disable-renderer-backgrounding')
+app.commandLine.appendSwitch('disable-background-timer-throttling')
+app.commandLine.appendSwitch('disable-backgrounding-occluded-windows')
+
 // ─── Auto-updater config ─────────────────────────────────────────────────────
 // Po założeniu repo na GitHub wpisz tutaj swoje dane:
 const GITHUB_OWNER = 'MrP3rru'        // ← twoja nazwa użytkownika na GitHub, np. 'mateu123'
@@ -446,8 +456,8 @@ function createWindow() {
   ipcMain.handle('zoom:set', (_e, idx) => { applyZoom(idx); return zoomIdx })
 
   // ─── Wydajność w tle ────────────────────────────────────────────────────
-  win.on('blur',  () => { win.webContents.setBackgroundThrottling(true);  win.webContents.send('app:background', true)  })
-  win.on('focus', () => { win.webContents.setBackgroundThrottling(false); win.webContents.send('app:background', false) })
+  win.on('blur',  () => { win.webContents.send('app:background', true)  })
+  win.on('focus', () => { win.webContents.send('app:background', false) })
 
   if (isDev) { win.loadURL('http://localhost:5173'); return }
   win.loadFile(path.join(DIST_DIR, 'index.html'))
@@ -961,9 +971,6 @@ ipcMain.handle('youtube:get-audio-url', async (_event, videoUrl) => {
 })
 
 app.whenReady().then(() => {
-  // ── Nazwa i ikonka w Menadżerze zadań ──────────────────────────────────
-  app.setName('Music App')
-  app.setAppUserModelId('com.mateu.musicapp')
   // ── Ciemny pasek tytułu ────────────────────────────────────────────────
   nativeTheme.themeSource = 'dark'
 
@@ -1080,7 +1087,7 @@ ipcMain.handle('updater:download', async (event) => {
 
   const sourceDir = path.join(extractDir, repoFolder)
   const appDir = path.join(__dirname, '..')
-  const SKIP = new Set(['node_modules', '.git', 'dist', 'release'])
+  const SKIP = new Set(['node_modules', '.git', 'dist', 'release', '.claude'])
 
   function copyDir(src, dest) {
     for (const item of fs.readdirSync(src)) {
