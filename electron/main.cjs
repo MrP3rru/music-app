@@ -480,7 +480,18 @@ function createWindow() {
   win.on('focus', () => { win.webContents.send('app:background', false) })
 
   if (isDev) { win.loadURL('http://localhost:5173'); return }
-  win.loadFile(path.join(DIST_DIR, 'index.html'))
+
+  // W produkcji uruchamiamy static server (http://localhost:3000) zamiast file://
+  // — YouTube i inne iframy wymagają HTTP origin (nie file://)
+  const serverPath = path.join(__dirname, 'static-server.cjs')
+  const server = child_process.fork(serverPath, [], { silent: true })
+  server.stdout.on('data', data => {
+    if (String(data).includes('Static server running')) {
+      win.loadURL('http://localhost:3000')
+    }
+  })
+  server.stderr.on('data', () => {})
+  win.on('closed', () => server.kill())
 }
 
 function extractIcyStreamTitle(metadataText) {

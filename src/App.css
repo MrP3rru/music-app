@@ -4526,6 +4526,18 @@ hls-video {
   transition: background 0.15s;
 }
 .tv-exp-btn:hover { background: rgba(0,0,0,0.9); color: #fff; }
+.tv-yt-cc-btn {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: 40px;
+  height: 40px;
+}
+.tv-yt-cc-btn.active {
+  background: rgba(91,141,240,0.35);
+  border-color: rgba(91,141,240,0.7);
+  color: #8eb4ff;
+}
 .tv-exp-close {
   bottom: auto !important;
   top: 14px;
@@ -4560,6 +4572,18 @@ hls-video {
 
 /* ── TV Fullscreen portal — nowe kontrolki ───────────────────────────────────── */
 .tv-fs-portal { cursor: default; }
+/* Gdy YouTube jest w trybie expanded, usuń backdrop-filter ze wszystkich kart.
+   backdrop-filter tworzy nowy containing block dla position:fixed, przez co
+   iframe fixed jest clampowany do stage-card zamiast do całego viewport. */
+.tv-yt-expanded .stage-card,
+.tv-yt-expanded .library-card,
+.tv-yt-expanded .topbar,
+.tv-yt-expanded .toolbar,
+.tv-yt-expanded .bottom-player {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
 
 /* Przycisk ✕ w górnym prawym rogu */
 .tv-fs-close {
@@ -4698,13 +4722,31 @@ hls-video {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  color: rgba(200,215,230,0.4);
-  font-size: 0.9rem;
+  gap: 8px;
+  color: rgba(200,215,230,0.45);
+  font-size: 0.88rem;
+  background: radial-gradient(ellipse at 50% 45%, rgba(91,141,240,0.07) 0%, transparent 65%);
 }
 .tv-placeholder-icon {
-  font-size: 2.8rem;
-  opacity: 0.5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(200,215,230,0.25);
+  margin-bottom: 4px;
+  animation: tvPlaceholderPulse 3s ease-in-out infinite;
+}
+@keyframes tvPlaceholderPulse {
+  0%, 100% { opacity: 0.6; transform: scale(1); }
+  50%       { opacity: 1;   transform: scale(1.06); }
+}
+.tv-placeholder-title {
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: rgba(200,215,230,0.55);
+}
+.tv-placeholder-sub {
+  font-size: 0.78rem;
+  color: rgba(200,215,230,0.3);
 }
 
 .tv-error-overlay {

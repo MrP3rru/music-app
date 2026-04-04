@@ -39,6 +39,17 @@ function trackToPayload(track, position, playing) {
   }
 }
 
+function tvToPayload({ tvSubMode, tvYoutubeUrl, tvYtCurrentTime, tvYtPlaying }) {
+  return {
+    subMode: tvSubMode ?? 'channels',
+    youtubeUrl: tvYoutubeUrl ?? '',
+    position: tvYtCurrentTime ?? 0,
+    playing: tvYtPlaying ?? false,
+    updatedAt: serverTimestamp(),
+    seekedAt: 0,
+  }
+}
+
 const DEFAULT_PERMISSIONS = { canPlay: false, canSkip: false, canAdd: false }
 
 export function useListenTogether({
@@ -48,12 +59,19 @@ export function useListenTogether({
   currentTrack,
   trackTimeRef,
   isTrackPlaying,
+  tvSubMode,
+  tvYoutubeUrl,
+  tvYtCurrentTime,
+  tvYtPlaying,
   nickname,
   onRemoteStationChange,
   onRemoteTrackChange,
   onRemoteSeek,
   onRemotePlayPause,
   onRemoteModeChange,
+  onRemoteTvStateChange,
+  onRemoteTvSeek,
+  onRemoteTvPlayPause,
   onActionNotification,
 }) {
   const [sessionCode, setSessionCode] = useState(null)
@@ -78,9 +96,14 @@ export function useListenTogether({
   const lastSyncedTrackIdRef = useRef(null)
   const lastSyncedPlayingRef = useRef(null)
   const lastSyncedModeRef = useRef(null)
+  const lastSyncedTvUrlRef = useRef('')
+  const lastSyncedTvSubModeRef = useRef('channels')
+  const lastSyncedTvPlayingRef = useRef(null)
   const positionIntervalRef = useRef(null)
+  const tvPositionIntervalRef = useRef(null)
   const initialSyncDoneRef = useRef(false)
   const lastReceivedSeekAtRef = useRef(0)
+  const lastReceivedTvSeekAtRef = useRef(0)
   const lastAppliedActionAtRef = useRef(0)
   const serverTimeOffsetRef = useRef(0)
 
@@ -91,6 +114,9 @@ export function useListenTogether({
   const onRemoteSeekRef = useRef(onRemoteSeek)
   const onRemotePlayPauseRef = useRef(onRemotePlayPause)
   const onRemoteModeChangeRef = useRef(onRemoteModeChange)
+  const onRemoteTvStateChangeRef = useRef(onRemoteTvStateChange)
+  const onRemoteTvSeekRef = useRef(onRemoteTvSeek)
+  const onRemoteTvPlayPauseRef = useRef(onRemoteTvPlayPause)
   const onActionNotificationRef = useRef(onActionNotification)
   // Aktualizuj przy każdym renderze (synchronicznie, przed wywołaniem useCallback)
   onRemoteStationChangeRef.current = onRemoteStationChange
@@ -98,6 +124,9 @@ export function useListenTogether({
   onRemoteSeekRef.current = onRemoteSeek
   onRemotePlayPauseRef.current = onRemotePlayPause
   onRemoteModeChangeRef.current = onRemoteModeChange
+  onRemoteTvStateChangeRef.current = onRemoteTvStateChange
+  onRemoteTvSeekRef.current = onRemoteTvSeek
+  onRemoteTvPlayPauseRef.current = onRemoteTvPlayPause
   onActionNotificationRef.current = onActionNotification
 
   // Keep nicknameRef in sync
@@ -113,6 +142,7 @@ export function useListenTogether({
   const stopListening = useCallback(() => {
     if (unsubRef.current) { unsubRef.current(); unsubRef.current = null }
     if (positionIntervalRef.current) { clearInterval(positionIntervalRef.current); positionIntervalRef.current = null }
+    if (tvPositionIntervalRef.current) { clearInterval(tvPositionIntervalRef.current); tvPositionIntervalRef.current = null }
   }, [])
 
   const leaveSession = useCallback((preserveError = false) => {
@@ -131,8 +161,12 @@ export function useListenTogether({
     lastSyncedTrackIdRef.current = null
     lastSyncedPlayingRef.current = null
     lastSyncedModeRef.current = null
+    lastSyncedTvUrlRef.current = ''
+    lastSyncedTvSubModeRef.current = 'channels'
+    lastSyncedTvPlayingRef.current = null
     initialSyncDoneRef.current = false
     lastReceivedSeekAtRef.current = 0
+    lastReceivedTvSeekAtRef.current = 0
     lastAppliedActionAtRef.current = 0
     setSessionCode(null)
     setIsHost(false)
@@ -151,6 +185,7 @@ export function useListenTogether({
     stopListening()
     initialSyncDoneRef.current = false
     lastReceivedSeekAtRef.current = 0
+    lastReceivedTvSeekAtRef.current = 0
     lastAppliedActionAtRef.current = 0
     const sessionRef = ref(db, `sessions/${code}`)
 
@@ -238,6 +273,30 @@ export function useListenTogether({
             if (!isHostRef.current) lastSyncedModeRef.current = payload.mode
             onRemoteModeChangeRef.current?.(payload.mode, true)
           }
+          if (type === 'tvStateChange') {
+            if (!isHostRef.current) {
+              lastSyncedTvSubModeRef.current = payload.subMode ?? 'channels'
+              lastSyncedTvUrlRef.current = payload.youtubeUrl ?? ''
+            }
+            onRemoteTvStateChangeRef.current?.(payload)
+          }
+          if (type === 'tvPlayPause') {
+            if (!isHostRef.current) lastSyncedTvPlayingRef.current = payload.playing
+            onRemoteTvPlayPauseRef.current?.(payload.playing)
+          }
+          if (type === 'tvSeek') {
+            onRemoteTvSeekRef.current?.(payload.position)
+            if (!isHostRef.current) {
+              lastReceivedTvSeekAtRef.current = data.lastAction.at
+            } else {
+              const code = sessionCodeRef.current
+              if (code) {
+                set(ref(db, `sessions/${code}/tv/position`), payload.position)
+                set(ref(db, `sessions/${code}/tv/seekedAt`), data.lastAction.at)
+                set(ref(db, `sessions/${code}/tv/updatedAt`), Date.now())
+              }
+            }
+          }
           if (type === 'stationChange') {
 if (!isHostRef.current) lastSyncedStationIdRef.current = payload.id
             onRemoteStationChangeRef.current?.(payload)
@@ -266,6 +325,7 @@ if (!isHostRef.current) lastSyncedStationIdRef.current = payload.id
           if (type === 'modeChange') { lastSyncedModeRef.current = payload.mode }
           if (type === 'playPause') { lastSyncedPlayingRef.current = payload.playing }
           if (type === 'seek') { lastReceivedSeekAtRef.current = data.lastAction.at }
+          if (type === 'tvSeek') { lastReceivedTvSeekAtRef.current = data.lastAction.at }
         }
       }
 
@@ -328,6 +388,30 @@ if (!isHostRef.current) lastSyncedStationIdRef.current = payload.id
           }
         }
 
+        if (data.mode === 'tv' && data.tv) {
+          const isInitialTv = !initialSyncDoneRef.current
+          const remoteSubMode = data.tv.subMode ?? 'channels'
+          const remoteUrl = data.tv.youtubeUrl ?? ''
+
+          if (remoteSubMode !== lastSyncedTvSubModeRef.current || remoteUrl !== lastSyncedTvUrlRef.current) {
+            lastSyncedTvSubModeRef.current = remoteSubMode
+            lastSyncedTvUrlRef.current = remoteUrl
+            onRemoteTvStateChangeRef.current?.(data.tv)
+          }
+
+          if (data.tv.playing !== lastSyncedTvPlayingRef.current) {
+            lastSyncedTvPlayingRef.current = data.tv.playing
+            onRemoteTvPlayPauseRef.current?.(data.tv.playing)
+          }
+
+          const tvSeekedAt = data.tv.seekedAt ?? 0
+          const isExplicitTvSeek = tvSeekedAt > lastReceivedTvSeekAtRef.current
+          if (isInitialTv || isExplicitTvSeek) {
+            lastReceivedTvSeekAtRef.current = tvSeekedAt
+            onRemoteTvSeekRef.current?.(data.tv.position ?? 0)
+          }
+        }
+
         initialSyncDoneRef.current = true
       }
     })
@@ -349,6 +433,7 @@ if (!isHostRef.current) lastSyncedStationIdRef.current = payload.id
       hostNick: nicknameRef.current || 'Host',
       radio: mode === 'radio' ? stationToPayload(currentStation) : null,
       player: mode === 'player' ? trackToPayload(currentTrack, trackTimeRef?.current ?? 0, isTrackPlaying) : null,
+      tv: mode === 'tv' ? tvToPayload({ tvSubMode, tvYoutubeUrl, tvYtCurrentTime, tvYtPlaying }) : null,
       listeners: {},
     }
     await set(ref(db, `sessions/${code}`), payload)
@@ -359,6 +444,9 @@ if (!isHostRef.current) lastSyncedStationIdRef.current = payload.id
     lastSyncedTrackIdRef.current = currentTrack?.id ?? null
     lastSyncedPlayingRef.current = isTrackPlaying
     lastSyncedModeRef.current = mode
+    lastSyncedTvSubModeRef.current = tvSubMode ?? 'channels'
+    lastSyncedTvUrlRef.current = tvYoutubeUrl ?? ''
+    lastSyncedTvPlayingRef.current = tvYtPlaying
     setSessionCode(code)
     setIsHost(true)
     setListenerCount(1)
@@ -370,7 +458,7 @@ if (!isHostRef.current) lastSyncedStationIdRef.current = payload.id
       setSessionError(`Nie udało się utworzyć sesji — błąd połączenia z Firebase\nSzczegóły: ${err?.message ?? err}`)
       setSessionLoading(false)
     }
-  }, [mode, currentStation, currentTrack, trackTimeRef, isTrackPlaying, subscribeToSession])
+  }, [mode, currentStation, currentTrack, trackTimeRef, isTrackPlaying, tvSubMode, tvYoutubeUrl, tvYtCurrentTime, tvYtPlaying, subscribeToSession])
 
   const joinSession = useCallback(async (code) => {
     const cleanCode = code.trim().toUpperCase()
@@ -442,6 +530,16 @@ if (!isHostRef.current) lastSyncedStationIdRef.current = payload.id
     })
   }, [])
 
+  const syncTvPositionNow = useCallback((position) => {
+    const code = sessionCodeRef.current
+    if (!code || !isHostRef.current) return
+    update(ref(db, `sessions/${code}/tv`), {
+      position,
+      seekedAt: Date.now(),
+      updatedAt: serverTimestamp(),
+    })
+  }, [])
+
   // Gość: zasugeruj utwór
   const suggestTrack = useCallback((track) => {
     const code = sessionCodeRef.current
@@ -503,6 +601,32 @@ if (!isHostRef.current) lastSyncedStationIdRef.current = payload.id
     })
   }, [isTrackPlaying, mode, currentTrack])
 
+  // Host: synchronizuj TV (submode + URL)
+  useEffect(() => {
+    if (!isHostRef.current || !sessionCodeRef.current) return
+    if (mode !== 'tv') return
+    if ((tvSubMode ?? 'channels') === lastSyncedTvSubModeRef.current && (tvYoutubeUrl ?? '') === lastSyncedTvUrlRef.current) return
+    lastSyncedTvSubModeRef.current = tvSubMode ?? 'channels'
+    lastSyncedTvUrlRef.current = tvYoutubeUrl ?? ''
+    update(ref(db, `sessions/${sessionCodeRef.current}/tv`), {
+      subMode: tvSubMode ?? 'channels',
+      youtubeUrl: tvYoutubeUrl ?? '',
+      updatedAt: serverTimestamp(),
+    })
+  }, [mode, tvSubMode, tvYoutubeUrl])
+
+  // Host: synchronizuj play/pause TV
+  useEffect(() => {
+    if (!isHostRef.current || !sessionCodeRef.current) return
+    if (mode !== 'tv') return
+    if (tvYtPlaying === lastSyncedTvPlayingRef.current) return
+    lastSyncedTvPlayingRef.current = tvYtPlaying
+    update(ref(db, `sessions/${sessionCodeRef.current}/tv`), {
+      playing: tvYtPlaying,
+      updatedAt: serverTimestamp(),
+    })
+  }, [mode, tvYtPlaying])
+
   // Host: synchronizuj pozycję co 3s
   useEffect(() => {
     if (!isHostRef.current || !sessionCodeRef.current || mode !== 'player') return
@@ -515,6 +639,19 @@ if (!isHostRef.current) lastSyncedStationIdRef.current = payload.id
     }, 3000)
     return () => { if (positionIntervalRef.current) clearInterval(positionIntervalRef.current) }
   }, [mode, trackTimeRef])
+
+  // Host: synchronizuj pozycję TV co 3s
+  useEffect(() => {
+    if (!isHostRef.current || !sessionCodeRef.current || mode !== 'tv') return
+    tvPositionIntervalRef.current = setInterval(() => {
+      if (!sessionCodeRef.current) return
+      update(ref(db, `sessions/${sessionCodeRef.current}/tv`), {
+        position: tvYtCurrentTime ?? 0,
+        updatedAt: serverTimestamp(),
+      })
+    }, 3000)
+    return () => { if (tvPositionIntervalRef.current) clearInterval(tvPositionIntervalRef.current) }
+  }, [mode, tvYtCurrentTime])
 
   useEffect(() => () => { stopListening() }, [stopListening])
 
@@ -575,6 +712,7 @@ if (!isHostRef.current) lastSyncedStationIdRef.current = payload.id
     sessionError, sessionLoading, inSession: !!sessionCode,
     suggestions, createSession, joinSession, leaveSession,
     suggestTrack, removeSuggestion, syncPositionNow,
+    syncTvPositionNow,
     updatePermission, setModerator, notifyAction,
     chatMessages, sendChatMessage, sendSystemMessage, clearChat, chatMuted, hostNick,
     deleteChatMsg, muteChatUser, blockChatUser, unblockChatUser,

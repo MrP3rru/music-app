@@ -1,7 +1,28 @@
 {
-  "version": "2.0.0",
-  "changelog": "Nowe kolory orbów tła, gradienty stacji radiowych z nazwą, podpowiedzi wyszukiwania przeprojektowane, ikona aplikacji w Task Managerze, naprawki scrollbara i animacji.",
+  "version": "2.1.0",
+  "changelog": "Nowa zakładka TV — kanały HLS, filtry kategorii i krajów, tryb pełnoekranowy, DVR bar, naprawa widoczności przycisków nad playerem.",
   "history": [
+    {
+      "version": "2.1.0",
+      "date": "2026-04-04",
+      "changes": [
+        "Nowa zakładka TV — oglądaj kanały telewizyjne na żywo bez wychodzenia z aplikacji",
+        "Polskie kanały TVP — TVP 1, TVP Info, TVP Polonia, TVP World ze statycznymi strumieniami HLS",
+        "Kategorie kanałów — Polskie, Wiadomości, Muzyczne, Sport, Rozrywka, Dla dzieci, Nauka, Dokumentalne",
+        "Filtr krajów w każdej kategorii — filtruj kanały po kraju (flaga + kod kraju)",
+        "Wyszukiwarka kanałów — szybkie filtrowanie po nazwie",
+        "Wygląd spójny z zakładką Radio — chip-filtry, nagłówek z licznikiem, karty z flagami krajów",
+        "Tryb pełnoekranowy (pełny ekran monitora) — prawdziwy fullscreen przez Electron IPC",
+        "Tryb rozszerzony (pełna aplikacja) — player wypełnia całe okno aplikacji przez React Portal",
+        "Przyciski sterowania zawsze widoczne w trybie rozszerzonym i pełnoekranowym (bez hover)",
+        "Naprawa zasłaniania przycisków przez video — clip-path: inset(0) wyłącza hardware overlay Chromium",
+        "DVR bar — pasek postępu live z możliwością cofnięcia, przycisk LIVE cofa do bezpiecznej krawędzi (edge−15s)",
+        "Suwak DVR nie wychodzi poza zakres buforowania",
+        "Naprawa skoku głośności przy zmianie kanału — głośność ustawiana synchronicznie przed autoPlay",
+        "Obsługa YouTube w zakładce TV — wklej link YouTube i oglądaj teledyski/streamy",
+        "Klawisz Esc zamyka tryb pełnoekranowy i rozszerzony"
+      ]
+    },
     {
       "version": "2.0.0",
       "date": "2026-04-01",

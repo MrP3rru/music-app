@@ -913,6 +913,22 @@ function isValidYoutubeUrl(url) {
   } catch { return false }
 }
 
+function getYoutubeVideoId(url) {
+  try {
+    const u = new URL(url)
+    if (u.hostname === 'youtu.be') return u.pathname.slice(1).split(/[?#]/)[0]
+    let id = u.searchParams.get('v')
+    if (!id) { const m = u.pathname.match(/\/(?:embed|v|shorts|live)\/([\w-]{11})/); if (m) id = m[1] }
+    return id || null
+  } catch { return null }
+}
+
+function getYoutubeEmbedUrl(url) {
+  const id = getYoutubeVideoId(url)
+  if (!id) return null
+  return `https://www.youtube-nocookie.com/embed/${id}?autoplay=1&rel=0&modestbranding=1&enablejsapi=1&controls=0`
+}
+
 function App() {
   const ZOOM_LEVELS = Array.from({ length: 31 }, (_, i) => Math.round((0.70 + i * 0.02) * 100) / 100)
   const ZOOM_LABELS = ZOOM_LEVELS.map(f => `${Math.round(f * 100)}%`)
@@ -1096,6 +1112,16 @@ function App() {
   const onTvError   = useCallback(() => setTvPlayerError(true),  [])
   const onTvPlaying = useCallback(() => { setTvPlayerError(false); setTvIsPlaying(true) }, [])
   const onTvPause   = useCallback(() => setTvIsPlaying(false), [])
+
+  // ─── TV YouTube IFrame API ─────────────────────────────────────────────────
+  const tvYtIframeRef    = useRef(null)
+  const tvYtVolRef       = useRef(35)
+  const [tvYtPlaying, setTvYtPlaying]         = useState(false)
+  const [tvYtCurrentTime, setTvYtCurrentTime] = useState(0)
+  const [tvYtDuration, setTvYtDuration]       = useState(0)
+  const [tvYtTitle, setTvYtTitle]             = useState('')
+  const [tvYtThumbnail, setTvYtThumbnail]     = useState('')
+  const [tvYtCc, setTvYtCc]                  = useState(false)
 
   // Wyjście z trybu rozszerzonego — Escape
   useEffect(() => {
@@ -1633,6 +1659,51 @@ function App() {
     const interval = setInterval(tick, 2000)
     return () => clearInterval(interval)
   }, [tvIsPlaying, currentTvChannel])
+
+  // ─── TV YouTube — nasłuch wiadomości IFrame API ───────────────────────────
+  useEffect(() => {
+    if (tvSubMode !== 'youtube' || !tvYoutubeUrl) return
+    function onMsg(e) {
+      if (typeof e.data !== 'string') return
+      try {
+        const d = JSON.parse(e.data)
+        if (d.event === 'initialDelivery' || d.event === 'infoDelivery') {
+          const info = d.info || {}
+          if (typeof info.currentTime === 'number') setTvYtCurrentTime(info.currentTime)
+          if (typeof info.duration === 'number' && info.duration > 0) setTvYtDuration(info.duration)
+          if (typeof info.playerState === 'number') setTvYtPlaying(info.playerState === 1)
+          if (d.event === 'initialDelivery') {
+            if (info.videoData?.title) setTvYtTitle(info.videoData.title)
+            // Ustaw głośność aplikacji w playerze YouTube
+            tvYtIframeRef.current?.contentWindow?.postMessage(
+              JSON.stringify({ event: 'command', func: 'setVolume', args: [tvYtVolRef.current] }),
+              'https://www.youtube-nocookie.com'
+            )
+          }
+        }
+      } catch {}
+    }
+    window.addEventListener('message', onMsg)
+    return () => window.removeEventListener('message', onMsg)
+  }, [tvSubMode, tvYoutubeUrl])
+
+  // ─── TV YouTube — sync głośności z aplikacji ─────────────────────────────
+  useEffect(() => { tvYtVolRef.current = volumePercent }, [volumePercent])
+  useEffect(() => {
+    if (tvSubMode !== 'youtube' || !tvYoutubeUrl) return
+    tvYtIframeRef.current?.contentWindow?.postMessage(
+      JSON.stringify({ event: 'command', func: 'setVolume', args: [volumePercent] }),
+      'https://www.youtube-nocookie.com'
+    )
+  }, [volumePercent, tvSubMode, tvYoutubeUrl])
+
+  // ─── TV YouTube — thumbnail z video ID ───────────────────────────────────
+  useEffect(() => {
+    if (!tvYoutubeUrl) { setTvYtTitle(''); setTvYtThumbnail(''); setTvYtCurrentTime(0); setTvYtDuration(0); setTvYtPlaying(false); return }
+    const id = getYoutubeVideoId(tvYoutubeUrl)
+    setTvYtThumbnail(id ? `https://img.youtube.com/vi/${id}/mqdefault.jpg` : '')
+    setTvYtCurrentTime(0); setTvYtDuration(0); setTvYtPlaying(false); setTvYtTitle('')
+  }, [tvYoutubeUrl])
 
   // ─── Historia odtwarzania (localStorage, 2 dni) ───────────────────────────
   useEffect(() => {
@@ -2476,10 +2547,16 @@ function App() {
       showSessionToast('Tylko host może zmieniać zakładki podczas sesji')
       return
     }
-    // Opuszczamy zakładkę TV — zatrzymaj expand/fullscreen
+    // Opuszczamy zakładkę TV — zatrzymaj expand/fullscreen i zwolnij RAM
     if (mode === 'tv' && nextMode !== 'tv') {
-      window.playerBridge?.setWindowFullscreen?.(false)
+      if (tvExpandMode !== 'normal') {
+        window.playerBridge?.setWindowFullscreen?.(false)
+      }
       setTvExpandMode('normal')
+      setTvChannels([])
+      setCurrentTvChannel(null)
+      setTvYoutubeUrl('')
+      setTvYoutubeInput('')
     }
     setMode(nextMode)
     if (nextMode === 'radio') setLyricsVisible(false)
@@ -2488,6 +2565,19 @@ function App() {
     setStationSearchTerm('')
     if (!remote && inSession) notifyAction('modeChange', { mode: nextMode })
   }
+
+  function applyTvYoutubeUrl(nextUrl, remote = false) {
+    if (!remote && !checkPerm('canAdd')) return
+    const clean = (nextUrl || '').trim()
+    setTvYoutubeInput(clean)
+    if (!isValidYoutubeUrl(clean)) return
+    setTvSubMode('youtube')
+    setCurrentTvChannel(null)
+    setTvYoutubeUrl(clean)
+    setTvPlayerError(false)
+    if (!remote && inSession) notifyAction('tvStateChange', { subMode: 'youtube', youtubeUrl: clean })
+  }
+
   // Zapisuj tryb do localStorage przy każdej zmianie
   useEffect(() => {
     localStorage.setItem('hiphop-player-mode', mode)
@@ -2927,6 +3017,7 @@ function App() {
     suggestTrack,
     removeSuggestion,
     syncPositionNow,
+    syncTvPositionNow,
     updatePermission,
     setModerator,
     notifyAction,
@@ -2947,6 +3038,10 @@ function App() {
     currentTrack,
     trackTimeRef,
     isTrackPlaying,
+    tvSubMode,
+    tvYoutubeUrl,
+    tvYtCurrentTime,
+    tvYtPlaying,
     nickname: myNickname,
     onRemoteStationChange: (stationData) => {
       if (!stationData?.id) return
@@ -2983,14 +3078,47 @@ function App() {
     onRemoteModeChange: (nextMode) => {
       updateMode(nextMode, true)
     },
+    onRemoteTvStateChange: (tvData) => {
+      if (!tvData) return
+      const nextSubMode = tvData.subMode ?? 'channels'
+      setTvSubMode(nextSubMode)
+      if (nextSubMode === 'youtube') {
+        const nextUrl = tvData.youtubeUrl ?? ''
+        setTvYoutubeInput(nextUrl)
+        setTvYoutubeUrl(nextUrl)
+        setTvPlayerError(false)
+      }
+    },
+    onRemoteTvSeek: (position) => {
+      if (!Number.isFinite(Number(position))) return
+      const pos = Math.max(0, Number(position))
+      setTvYtCurrentTime(pos)
+      tvYtIframeRef.current?.contentWindow?.postMessage(
+        JSON.stringify({ event: 'command', func: 'seekTo', args: [pos, true] }),
+        'https://www.youtube-nocookie.com'
+      )
+    },
+    onRemoteTvPlayPause: (playing) => {
+      setTvYtPlaying(!!playing)
+      const iframe = tvYtIframeRef.current
+      if (!iframe) return
+      const func = playing ? 'playVideo' : 'pauseVideo'
+      iframe.contentWindow?.postMessage(
+        JSON.stringify({ event: 'command', func, args: '' }),
+        'https://www.youtube-nocookie.com'
+      )
+    },
     onActionNotification: (nick, type, payload) => {
       const sysVerb = {
         playPause: payload.playing
           ? `▶ ${nick} wznowił ${payload.mode === 'radio' ? 'radio' : 'odtwarzanie'}`
           : `⏸ ${nick} wstrzymał ${payload.mode === 'radio' ? 'radio' : 'odtwarzanie'}`,
         trackChange: `🎵 ${nick} włączył: ${payload.title ?? ''}`,
-        modeChange: `🔄 ${nick} przełączył na ${payload.mode === 'radio' ? 'Radio' : 'Player'}`,
+        modeChange: `🔄 ${nick} przełączył na ${payload.mode === 'radio' ? 'Radio' : payload.mode === 'player' ? 'Player' : 'TV'}`,
         stationChange: `📻 ${nick} zmienił stację: ${payload.name ?? ''}`,
+        tvStateChange: `📺 ${nick} uruchomił YouTube w TV`,
+        tvPlayPause: payload.playing ? `▶ ${nick} wznowił TV` : `⏸ ${nick} wstrzymał TV`,
+        tvSeek: `⏩ ${nick} przewinął TV`,
       }
       const text = sysVerb[type]
       if (text) sendSysMsgRef.current?.(text)
@@ -3408,7 +3536,7 @@ function App() {
         </div>
       </div>
     )}
-    <main className="app-shell">
+    <main className={`app-shell${tvSubMode === 'youtube' && tvExpandMode !== 'normal' ? ' tv-yt-expanded' : ''}`}>
       <audio
         ref={audioRef}
         crossOrigin="anonymous"
@@ -3617,7 +3745,12 @@ function App() {
             <div className="tv-stage">
               <div className="tv-submode-bar">
                 <button className={`tv-submode-btn${tvSubMode === 'channels' ? ' active' : ''}`} onClick={() => setTvSubMode('channels')}>📺 Kanały</button>
-                <button className={`tv-submode-btn${tvSubMode === 'youtube' ? ' active' : ''}`} onClick={() => setTvSubMode('youtube')} disabled title="Jeszcze nie skończone"> ▶ YouTube</button>
+                <button className={`tv-submode-btn${tvSubMode === 'youtube' ? ' active' : ''}`} onClick={() => {
+                  if (!checkPerm('canAdd')) return
+                  setTvSubMode('youtube')
+                  setCurrentTvChannel(null)
+                  if (inSession) notifyAction('tvStateChange', { subMode: 'youtube', youtubeUrl: tvYoutubeUrl || '' })
+                }}>▶ YouTube</button>
              
               </div>
               {tvSubMode === 'youtube' && (
@@ -3625,13 +3758,13 @@ function App() {
                   <input
                     className="tv-yt-input"
                     value={tvYoutubeInput}
-                    onChange={e => setTvYoutubeInput(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter' && isValidYoutubeUrl(tvYoutubeInput)) { setTvYoutubeUrl(tvYoutubeInput); setTvPlayerError(false) } }}
+                    onChange={e => { const v = e.target.value; setTvYoutubeInput(v); if (isValidYoutubeUrl(v.trim())) applyTvYoutubeUrl(v) }}
+                    onKeyDown={e => { if (e.key === 'Enter' && isValidYoutubeUrl(tvYoutubeInput)) applyTvYoutubeUrl(tvYoutubeInput) }}
                     placeholder="Wklej link YouTube lub YouTube Live..."
                   />
                   <button
                     className="tv-yt-play-btn"
-                    onClick={() => { if (isValidYoutubeUrl(tvYoutubeInput)) { setTvYoutubeUrl(tvYoutubeInput); setTvPlayerError(false) } }}
+                    onClick={() => { if (isValidYoutubeUrl(tvYoutubeInput)) applyTvYoutubeUrl(tvYoutubeInput) }}
                   >▶</button>
                 </div>
               )}
@@ -3733,34 +3866,168 @@ function App() {
                     </>
                   )
                 })()}
-                {tvSubMode === 'youtube' && tvYoutubeUrl && (
-                  <>
-                    <ReactPlayer
-                      key={tvYoutubeUrl}
-                      ref={tvPlayerRef}
-                      url={tvYoutubeUrl}
-                      playing
-                      controls
-                      width="100%"
-                      height="100%"
-                      onError={() => setTvPlayerError(true)}
-                      onReady={() => setTvPlayerError(false)}
-                      config={{ youtube: { playerVars: { modestbranding: 1, rel: 0 } } }}
-                    />
-                    {tvPlayerError && (
-                      <div className="tv-error-overlay">
-                        <span>⚠ Nie udało się załadować wideo</span>
-                        <button onClick={() => setTvPlayerError(false)}>OK</button>
-                      </div>
-                    )}
-                  </>
-                )}
+                {tvSubMode === 'youtube' && tvYoutubeUrl && (() => {
+                  const embedUrl = getYoutubeEmbedUrl(tvYoutubeUrl)
+                  if (!embedUrl) return (
+                    <div className="tv-error-overlay">
+                      <span>⚠ Nie udało się odczytać linku YouTube</span>
+                      <button onClick={() => { setTvYoutubeUrl(''); setTvYoutubeInput('') }}>Wyczyść</button>
+                    </div>
+                  )
+                  const expanded = tvExpandMode !== 'normal'
+                  const exitExpand = () => { window.playerBridge?.setWindowFullscreen?.(false); setTvExpandMode('normal') }
+
+                  const injectCss = (attempt = 0) => {
+                    try {
+                      const doc = tvYtIframeRef.current?.contentDocument
+                      if (!doc) { if (attempt < 30) setTimeout(() => injectCss(attempt + 1), 200); return }
+                      if (doc.getElementById('app-yt-css')) return
+                      const s = doc.createElement('style')
+                      s.id = 'app-yt-css'
+                      // controls=0 ukrywa chrome-bottom; te selektory usuwają resztę nakładek
+                      s.textContent = `
+                        .ytp-title, .ytp-title-text, .ytp-title-link,
+                        .ytp-watermark,
+                        .ytp-endscreen, .videowall-endscreen, .ytp-ce-element,
+                        .ytp-cards-teaser, .ytp-cards-teaser-text, .ytp-cards-button,
+                        .ytp-sb-subscribe, .ytp-autonav-toggle-button,
+                        .ytp-chrome-top, .ytp-gradient-top,
+                        .ytp-share-button, .ytp-watch-later-button,
+                        .ytp-copy-link-button, .ytp-miniplayer-button
+                        { display: none !important; }
+                      `
+                      doc.head?.appendChild(s)
+                    } catch { if (attempt < 30) setTimeout(() => injectCss(attempt + 1), 200) }
+                  }
+
+                  const handleCc = () => {
+                    try {
+                      tvYtIframeRef.current?.contentDocument?.querySelector('.ytp-subtitles-button')?.click()
+                    } catch {}
+                    setTvYtCc(p => !p)
+                  }
+
+                  // iframe ZAWSZE w tym samym miejscu DOM — tylko styl się zmienia
+                  // Dzięki temu React nie odmontowuje przy expand i video nie restartuje
+                  return (
+                    <>
+                      <iframe
+                        key={embedUrl}
+                        ref={tvYtIframeRef}
+                        src={embedUrl}
+                        style={expanded
+                          ? { position: 'fixed', inset: 0, zIndex: 2147483646, border: 'none', display: 'block', width: '100%', height: '100%' }
+                          : { border: 'none', display: 'block', width: '100%', height: '100%' }
+                        }
+                        allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
+                        allowFullScreen
+                        title="YouTube"
+                        onLoad={() => {
+                          tvYtIframeRef.current?.contentWindow?.postMessage(
+                            JSON.stringify({ event: 'listening', id: 1 }),
+                            'https://www.youtube-nocookie.com'
+                          )
+                          injectCss()
+                        }}
+                      />
+
+                      {/* Tryb normalny — CC u góry + expand u dołu */}
+                      {!expanded && (
+                        <>
+                          <button
+                            className={`tv-exp-btn tv-yt-cc-btn${tvYtCc ? ' active' : ''}`}
+                            style={{ top: 14, right: 14, bottom: 'auto' }}
+                            title={tvYtCc ? 'Wyłącz napisy' : 'Włącz napisy'}
+                            onClick={handleCc}
+                          >
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm-9 7H9.5v-.5h-2v3h2V13H11v1c0 .55-.45 1-1 1H7c-.55 0-1-.45-1-1v-4c0-.55.45-1 1-1h3c.55 0 1 .45 1 1v1zm7 0h-1.5v-.5h-2v3h2V13H18v1c0 .55-.45 1-1 1h-3c-.55 0-1-.45-1-1v-4c0-.55.45-1 1-1h3c.55 0 1 .45 1 1v1z"/></svg>
+                            <span style={{ fontSize: '0.65rem', lineHeight: 1 }}>CC</span>
+                          </button>
+                          <div className="tv-inline-controls">
+                            <button className="tv-exp-btn" style={{ right: 56 }}
+                              title="Pełna aplikacja"
+                              onClick={() => setTvExpandMode('app')}>
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
+                            </button>
+                            <button className="tv-exp-btn" style={{ right: 12 }}
+                              title="Pełny ekran monitora"
+                              onClick={() => { setTvExpandMode('monitor'); window.playerBridge?.setWindowFullscreen?.(true) }}>
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M3 5v4h2V5h4V3H5C3.9 3 3 3.9 3 5zm2 10H3v4c0 1.1.9 2 2 2h4v-2H5v-4zm14 4h-4v2h4c1.1 0 2-.9 2-2v-4h-2v4zm0-16h-4v2h4v4h2V5c0-1.1-.9-2-2-2z"/></svg>
+                            </button>
+                          </div>
+                        </>
+                      )}
+
+                      {/* Tryb rozszerzony — tylko kontrolki w portalu, iframe jest fixed powyżej */}
+                      {expanded && createPortal(
+                        <div style={{ position: 'fixed', inset: 0, zIndex: 2147483647, background: 'transparent', pointerEvents: 'none' }} className="tv-fs-portal">
+                          <button className="tv-fs-close" style={{ pointerEvents: 'auto' }} title="Zamknij (Esc)" onClick={exitExpand}>✕</button>
+                          <div className="tv-fs-bar" style={{ pointerEvents: 'auto' }}>
+                            <span className="tv-fs-channel">▶ {tvYtTitle || 'YouTube'}</span>
+                            <div style={{ flex: 1 }} />
+                            {/* CC w pasku fullscreen */}
+                            <button
+                              className={`tv-fs-btn${tvYtCc ? ' active' : ''}`}
+                              style={tvYtCc ? { background: 'rgba(91,141,240,0.25)', borderColor: 'rgba(91,141,240,0.6)', color: '#8eb4ff' } : undefined}
+                              onClick={handleCc}
+                              title={tvYtCc ? 'Wyłącz napisy' : 'Włącz napisy'}
+                            >
+                              <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm-9 7H9.5v-.5h-2v3h2V13H11v1c0 .55-.45 1-1 1H7c-.55 0-1-.45-1-1v-4c0-.55.45-1 1-1h3c.55 0 1 .45 1 1v1zm7 0h-1.5v-.5h-2v3h2V13H18v1c0 .55-.45 1-1 1h-3c-.55 0-1-.45-1-1v-4c0-.55.45-1 1-1h3c.55 0 1 .45 1 1v1z"/></svg>
+                              <span>CC</span>
+                            </button>
+                            <div className="tv-fs-vol">
+                              <button className="tv-fs-vol-icon" title="Wycisz/Włącz" onClick={() => setVolumePercent(v => v === 0 ? 35 : 0)}>
+                                {volumePercent === 0
+                                  ? <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M16.5 12A4.5 4.5 0 0 0 14 7.97v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51A8.796 8.796 0 0 0 21 12c0-4.28-3-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06A8.99 8.99 0 0 0 17.73 18l1.98 2L21 18.73 4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>
+                                  : volumePercent < 50
+                                  ? <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M18.5 12A4.5 4.5 0 0 0 16 7.97v8.05c1.48-.73 2.5-2.25 2.5-4.02zM5 9v6h4l5 5V4L9 9H5z"/></svg>
+                                  : <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 7.97v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>}
+                              </button>
+                              <input className="tv-fs-vol-slider" type="range" min="0" max="100" step="1"
+                                value={volumePercent} onChange={handleVolumeChange}
+                                onMouseUp={handleVolumeCommit} onTouchEnd={handleVolumeCommit}
+                                style={{ '--vol': `${volumePercent}%` }}
+                              />
+                              <span className="tv-fs-vol-num">{volumePercent}%</span>
+                            </div>
+                            <button className="tv-fs-btn" title={tvExpandMode === 'app' ? 'Pełny monitor' : 'Tryb aplikacji'}
+                              onClick={() => {
+                                if (tvExpandMode === 'app') { setTvExpandMode('monitor'); window.playerBridge?.setWindowFullscreen?.(true) }
+                                else { setTvExpandMode('app'); window.playerBridge?.setWindowFullscreen?.(false) }
+                              }}>
+                              {tvExpandMode === 'monitor'
+                                ? <><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z"/></svg><span>Tryb aplikacji</span></>
+                                : <><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M3 5v4h2V5h4V3H5C3.9 3 3 3.9 3 5zm2 10H3v4c0 1.1.9 2 2 2h4v-2H5v-4zm14 4h-4v2h4c1.1 0 2-.9 2-2v-4h-2v4zm0-16h-4v2h4v4h2V5c0-1.1-.9-2-2-2z"/></svg><span>Pełny monitor</span></>}
+                            </button>
+                            <button className="tv-fs-btn tv-fs-exit-btn" onClick={exitExpand}>
+                              <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+                              <span>Zamknij</span>
+                            </button>
+                          </div>
+                        </div>,
+                        document.body
+                      )}
+                    </>
+                  )
+                })()}
                 {((tvSubMode === 'channels' && !currentTvChannel) || (tvSubMode === 'youtube' && !tvYoutubeUrl)) && (
                   <div className="tv-placeholder">
                     {tvSubMode === 'channels' ? (
-                      <><span className="tv-placeholder-icon">📺</span><span>Wybierz kanał z listy po prawej</span></>
+                      <>
+                        <span className="tv-placeholder-icon">
+                          <svg width="52" height="52" viewBox="0 0 24 24" fill="currentColor"><path d="M21 3H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h5v2h8v-2h5c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 14H3V5h18v12z"/></svg>
+                        </span>
+                        <span className="tv-placeholder-title">Wybierz kanał z listy po prawej</span>
+                        <span className="tv-placeholder-sub">Kliknij na kanał aby rozpocząć odtwarzanie</span>
+                      </>
                     ) : (
-                      <><span className="tv-placeholder-icon">▶</span><span>Wklej link YouTube powyżej i naciśnij ▶</span></>
+                      <>
+                        <span className="tv-placeholder-icon">
+                          <svg width="52" height="52" viewBox="0 0 24 24" fill="currentColor"><path d="M10 15l5.19-3L10 9v6m11.56-7.83c.13.47.22 1.1.28 1.9.07.8.1 1.49.1 2.09L22 12c0 2.19-.16 3.8-.44 4.83-.25.9-.83 1.48-1.73 1.73-.47.13-1.33.22-2.65.28-1.3.07-2.49.1-3.59.1L12 19c-4.19 0-6.8-.16-7.83-.44-.9-.25-1.48-.83-1.73-1.73-.13-.47-.22-1.1-.28-1.9-.07-.8-.1-1.49-.1-2.09L2 12c0-2.19.16-3.8.44-4.83.25-.9.83-1.48 1.73-1.73.47-.13 1.33-.22 2.65-.28 1.3-.07 2.49-.1 3.59-.1L12 5c4.19 0 6.8.16 7.83.44.9.25 1.48.83 1.73 1.73z"/></svg>
+                        </span>
+                        <span className="tv-placeholder-title">Wklej link YouTube</span>
+                        <span className="tv-placeholder-sub">Link zostanie odtworzony automatycznie po wklejeniu</span>
+                      </>
                     )}
                   </div>
                 )}
@@ -4861,13 +5128,17 @@ function App() {
         <div className="bottom-nowplaying">
           {mode === 'tv' ? (
             <>
-              {currentTvChannel?.logo
-                ? <img key="tv-art" src={currentTvChannel.logo} alt="" style={{ borderRadius: 8, objectFit: 'contain', background: 'rgba(255,255,255,0.07)' }} onError={e => { e.target.style.display = 'none' }} />
-                : <div key="tv-art" style={{ width: 48, height: 48, borderRadius: 8, background: 'rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem', flexShrink: 0 }}>📺</div>
+              {tvSubMode === 'youtube'
+                ? tvYtThumbnail
+                  ? <img key="tv-yt-art" src={tvYtThumbnail} alt="" style={{ width: 48, height: 36, borderRadius: 6, objectFit: 'cover', flexShrink: 0 }} />
+                  : <div key="tv-yt-art" style={{ width: 48, height: 36, borderRadius: 6, background: 'rgba(255,50,50,0.12)', border: '1px solid rgba(255,80,80,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><svg width="20" height="20" viewBox="0 0 24 24" fill="#ff6060"><path d="M10 15l5.19-3L10 9v6m11.56-7.83c.13.47.22 1.1.28 1.9.07.8.1 1.49.1 2.09L22 12c0 2.19-.16 3.8-.44 4.83-.25.9-.83 1.48-1.73 1.73-.47.13-1.33.22-2.65.28-1.3.07-2.49.1-3.59.1L12 19c-4.19 0-6.8-.16-7.83-.44-.9-.25-1.48-.83-1.73-1.73-.13-.47-.22-1.1-.28-1.9-.07-.8-.1-1.49-.1-2.09L2 12c0-2.19.16-3.8.44-4.83.25-.9.83-1.48 1.73-1.73.47-.13 1.33-.22 2.65-.28 1.3-.07 2.49-.1 3.59-.1L12 5c4.19 0 6.8.16 7.83.44.9.25 1.48.83 1.73 1.73z"/></svg></div>
+                : currentTvChannel?.logo
+                  ? <img key="tv-art" src={currentTvChannel.logo} alt="" style={{ borderRadius: 8, objectFit: 'contain', background: 'rgba(255,255,255,0.07)' }} onError={e => { e.target.style.display = 'none' }} />
+                  : <div key="tv-art" style={{ width: 48, height: 48, borderRadius: 8, background: 'rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><svg width="24" height="24" viewBox="0 0 24 24" fill="rgba(200,215,230,0.5)"><path d="M21 3H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h5v2h8v-2h5c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 14H3V5h18v12z"/></svg></div>
               }
               <div className="bottom-nowcopy">
-                <p className="bottom-label">Teraz oglądasz</p>
-                <p className="title-single-text compact">{currentTvChannel?.name || 'Wybierz kanał'}</p>
+                <p className="bottom-label">{tvSubMode === 'youtube' ? 'YouTube' : 'Teraz oglądasz'}</p>
+                <p className="title-single-text compact">{tvSubMode === 'youtube' ? (tvYtTitle || tvYoutubeUrl || 'Wklej link YouTube') : (currentTvChannel?.name || 'Wybierz kanał')}</p>
               </div>
             </>
           ) : (
@@ -4900,16 +5171,30 @@ function App() {
             {mode === 'tv' ? (
               <>
                 <button className="player-button ghost" onClick={() => {
-                  const el = tvVideoRef.current
-                  if (!el) return
-                  if (tvIsPlaying) { el.pause(); setTvIsPlaying(false) }
-                  else { el.play().catch(() => {}); setTvIsPlaying(true) }
+                  if (tvSubMode === 'youtube') {
+                    if (!checkPerm('canPlay')) return
+                    const iframe = tvYtIframeRef.current
+                    if (!iframe) return
+                    const nextPlaying = !tvYtPlaying
+                    const func = nextPlaying ? 'playVideo' : 'pauseVideo'
+                    iframe.contentWindow.postMessage(JSON.stringify({ event: 'command', func, args: '' }), 'https://www.youtube-nocookie.com')
+                    setTvYtPlaying(nextPlaying)
+                    if (isHost) syncTvPositionNow(tvYtCurrentTime)
+                    else if (inSession) notifyAction('tvPlayPause', { playing: nextPlaying })
+                  } else {
+                    const el = tvVideoRef.current
+                    if (!el) return
+                    if (tvIsPlaying) { el.pause(); setTvIsPlaying(false) }
+                    else { el.play().catch(() => {}); setTvIsPlaying(true) }
+                  }
                 }}>
-                  {tvIsPlaying ? 'Pause' : 'Play'}
+                  {(tvSubMode === 'youtube' ? tvYtPlaying : tvIsPlaying) ? 'Pause' : 'Play'}
                 </button>
-                <button className="player-button ghost" onClick={() => {
-                  if (tvVideoRef.current) { tvVideoRef.current.currentTime = 0; tvVideoRef.current.play().catch(() => {}) }
-                }}>⟳ Od nowa</button>
+                {tvSubMode !== 'youtube' && (
+                  <button className="player-button ghost" onClick={() => {
+                    if (tvVideoRef.current) { tvVideoRef.current.currentTime = 0; tvVideoRef.current.play().catch(() => {}) }
+                  }}>⟳ Od nowa</button>
+                )}
               </>
             ) : mode === 'player' ? (
               <button className="player-button ghost" onClick={() => handleTrackPrevious(isTrackPlaying)}>
@@ -4938,7 +5223,53 @@ function App() {
           </div>
 
           {mode === 'tv' ? (
-            tvHasDvr && tvSeekableEnd > tvSeekableStart ? (() => {
+            tvSubMode === 'youtube' ? (() => {
+              if (tvYtDuration > 0) {
+                const pct = Math.min(100, (tvYtCurrentTime / tvYtDuration) * 100).toFixed(2)
+                return (
+                  <div className="bottom-track">
+                    <span>{formatSeconds(Math.round(tvYtCurrentTime))}</span>
+                    <div className="track-slider-wrap">
+                      <div className="track-slider-fill" style={{ '--pct': `${pct}%` }} />
+                      <div className="track-slider-thumb" style={{ '--pct': `${pct}%` }} />
+                      <input
+                        className="track-slider-input"
+                        type="range" min="0" max={Math.ceil(tvYtDuration)} step="1"
+                        value={Math.round(tvYtCurrentTime)}
+                        onChange={e => {
+                          if (!checkPerm('canPlay')) return
+                          const v = Number(e.target.value)
+                          setTvYtCurrentTime(v)
+                          tvYtIframeRef.current?.contentWindow?.postMessage(
+                            JSON.stringify({ event: 'command', func: 'seekTo', args: [v, true] }),
+                            'https://www.youtube-nocookie.com'
+                          )
+                        }}
+                        onMouseUp={e => {
+                          if (!checkPerm('canPlay')) return
+                          const v = Number(e.currentTarget.value)
+                          if (isHost) syncTvPositionNow(v)
+                          else if (inSession) notifyAction('tvSeek', { position: v })
+                        }}
+                        onTouchEnd={e => {
+                          if (!checkPerm('canPlay')) return
+                          const v = Number(e.currentTarget.value)
+                          if (isHost) syncTvPositionNow(v)
+                          else if (inSession) notifyAction('tvSeek', { position: v })
+                        }}
+                      />
+                    </div>
+                    <span>{formatSeconds(Math.round(tvYtDuration))}</span>
+                  </div>
+                )
+              }
+              return (
+                <div className="tv-live-simple">
+                  <span className={`tv-live-dot${tvYtPlaying ? ' on' : ''}`} />
+                  <span>{tvYtPlaying ? 'LIVE' : 'STOP'}</span>
+                </div>
+              )
+            })() : tvHasDvr && tvSeekableEnd > tvSeekableStart ? (() => {
               // Pasek DVR — max to seekableEnd-15s (ukryty bufor live)
               const LIVE_BUFFER = 15
               const dvrMax  = tvSeekableEnd - LIVE_BUFFER
