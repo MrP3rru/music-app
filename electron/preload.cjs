@@ -43,4 +43,9 @@ contextBridge.exposeInMainWorld('playerBridge', {
   youtubeLogout:          () => ipcRenderer.invoke('youtube:logout'),
   getPlaylistInnertube:   (id) => ipcRenderer.invoke('youtube:playlist-innertube', id),
   getAudioUrl:            (videoUrl) => ipcRenderer.invoke('youtube:get-audio-url', videoUrl),
+  // TV Cast (Chromecast + QR code)
+  tvGetUrl:    ()        => ipcRenderer.invoke('tv:get-url'),
+  tvDiscover:  ()        => ipcRenderer.invoke('tv:discover'),
+  tvCast:      (opts)    => ipcRenderer.invoke('tv:cast', opts),
+  tvUpdateMeta:(opts)    => ipcRenderer.invoke('tv:update-meta', opts),
 })

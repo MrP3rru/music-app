@@ -2380,6 +2380,18 @@ html.page-hidden *::after {
   pointer-events: none;
   letter-spacing: 0;
 }
+.casting-dot {
+  color: #ff4a4a !important;
+  animation: cast-dot-pulse 1.1s ease-in-out infinite;
+}
+@keyframes cast-dot-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.45; transform: scale(0.7); }
+}
+.together-btn.casting {
+  box-shadow: 0 0 16px rgba(255, 74, 74, 0.55), 0 0 32px rgba(255, 74, 74, 0.2);
+  border-color: rgba(255, 74, 74, 0.6) !important;
+}
 .game-btn { font-size: 1rem; }
 
 /* ── Color pick screen ── */
@@ -2981,6 +2993,7 @@ html.page-hidden *::after {
   border: 1px solid rgba(255,255,255,0.1);
   border-radius: 16px;
   padding: 22px 24px 18px;
+  width: min(420px, 100%);
   max-height: calc(100vh - 36px);
   box-shadow: 0 24px 60px rgba(0,0,0,0.6);
   display: flex;

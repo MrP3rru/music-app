@@ -1,22 +1,17 @@
+// Osobna konfiguracja Vite tylko dla aplikacji Radio PWA
+// Używana przez Netlify: npm run build:radio
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { resolve } from 'path'
 
-// https://vite.dev/config/
 export default defineConfig({
-  base: './',
+  base: '/',
   plugins: [react()],
-  server: {
-    host: true,   // dostępne na lokalnej sieci (TV/telefon w tej samej WiFi)
-    port: 5173,
-    hmr: {
-      overlay: false,
-    },
-  },
   build: {
+    outDir: 'dist-radio',
+    emptyOutDir: true,
     rollupOptions: {
       input: {
-        main:  resolve(__dirname, 'index.html'),
         radio: resolve(__dirname, 'radio.html'),
       },
     },

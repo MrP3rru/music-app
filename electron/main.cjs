@@ -1238,3 +1238,232 @@ ipcMain.handle('radiogarden:stream', (_event, channelId) => {
     req.setTimeout(6000, () => { req.destroy(); console.log('[RG] timeout'); resolve(null) })
   })
 })
+
+// ─── TV Cast ──────────────────────────────────────────────────────────────────
+;(function () {
+  const multicastDns = require('multicast-dns')
+  const { Client: CastClient } = require('castv2')
+
+  // Persistent session — stays alive so we can update metadata without full reconnect
+  let activeCast = null // { client, med, reqId, ip, port }
+
+  function closeActiveCast () {
+    if (!activeCast) return
+    try { activeCast.client.close?.() } catch {}
+    activeCast = null
+  }
+
+  function getLocalIp() {
+    for (const iface of Object.values(os.networkInterfaces())) {
+      for (const addr of (iface || [])) {
+        if (addr.family === 'IPv4' && !addr.internal) return addr.address
+      }
+    }
+    return '127.0.0.1'
+  }
+
+  // Returns the PWA radio URL accessible from the local network
+  ipcMain.handle('tv:get-url', () => {
+    const ip = getLocalIp()
+    const port = app.isPackaged ? 3000 : 5173
+    return `http://${ip}:${port}/radio.html`
+  })
+
+  // Discovers Chromecast devices on the local network via mDNS
+  ipcMain.handle('tv:discover', () => new Promise((resolve) => {
+    let browser
+    try { browser = multicastDns() } catch { resolve([]); return }
+
+    const srvMap = new Map()   // instanceName → { target, port }
+    const aMap   = new Map()   // hostname → ip
+    const txtMap = new Map()   // instanceName → { fn, id, md, ... }
+    const devices = new Map()  // deviceId → device
+
+    function tryBuildDevice(instanceName) {
+      const srv = srvMap.get(instanceName)
+      if (!srv) return
+      // try both "host.local" and "host.local."
+      const ip = aMap.get(srv.target) || aMap.get(srv.target.replace(/\.?$/, '.').toLowerCase())
+      if (!ip) return
+      const txt = txtMap.get(instanceName) || {}
+      const id  = txt.id || `${ip}:${srv.port}`
+      devices.set(id, {
+        id,
+        name: (txt.fn || instanceName.split('.')[0]).replace(/%20/g, ' '),
+        model: txt.md || '',
+        ip,
+        port: srv.port || 8009,
+      })
+    }
+
+    browser.on('response', ({ answers = [], additionals = [] }) => {
+      for (const r of [...answers, ...additionals]) {
+        const name = (r.name || '').toLowerCase()
+        if (r.type === 'SRV') {
+          srvMap.set(name, { target: (r.data.target || '').toLowerCase(), port: r.data.port })
+          tryBuildDevice(name)
+        }
+        if (r.type === 'A') {
+          aMap.set(name, r.data)
+          // Retry SRV entries waiting for this hostname
+          for (const [n, srv] of srvMap) {
+            if (srv.target === name || srv.target === name + '.') tryBuildDevice(n)
+          }
+        }
+        if (r.type === 'TXT' && r.data) {
+          const kv = {}
+          for (const part of r.data) {
+            const s = Buffer.isBuffer(part) ? part.toString('utf8') : String(part)
+            const eq = s.indexOf('=')
+            if (eq > 0) kv[s.slice(0, eq)] = s.slice(eq + 1)
+          }
+          txtMap.set(name, kv)
+          if (srvMap.has(name)) tryBuildDevice(name)
+        }
+        if (r.type === 'PTR' && r.data) {
+          tryBuildDevice((r.data || '').toLowerCase())
+        }
+      }
+    })
+
+    // Initial query, plus a second sweep after 1.5s for slower responders
+    browser.query({ questions: [{ name: '_googlecast._tcp.local', type: 'PTR' }] })
+    const t2 = setTimeout(() => {
+      browser.query({ questions: [{ name: '_googlecast._tcp.local', type: 'PTR' }] })
+    }, 1500)
+
+    setTimeout(() => {
+      clearTimeout(t2)
+      try { browser.destroy() } catch {}
+      resolve([...devices.values()])
+    }, 4000)
+  }))
+
+  // Sends a radio stream URL to a Chromecast device
+  ipcMain.handle('tv:cast', (_e, { ip, port = 8009, streamUrl, stationName, stationArt, currentSong }) => {
+    closeActiveCast() // tear down any previous session first
+    return new Promise((resolve, reject) => {
+      const client = new CastClient()
+      let done = false
+      let reqId = 1
+      let medChannel = null
+
+      const finish = (result) => {
+        if (done) return; done = true
+        clearTimeout(globalTimer)
+        // Store the live session so tv:update-meta can reuse it
+        if (medChannel) {
+          activeCast = { client, med: medChannel, get reqId() { return reqId }, set reqId(v) { reqId = v }, ip, port }
+        }
+        resolve(result)
+      }
+      const fail = (msg) => {
+        if (done) return; done = true
+        clearTimeout(globalTimer)
+        try { client.close?.() } catch {}
+        activeCast = null
+        reject(new Error(msg))
+      }
+
+      const globalTimer = setTimeout(() => fail('Cast timeout (15s)'), 15000)
+
+      client.connect(ip, () => {
+        const NS_CONNECT   = 'urn:x-cast:com.google.cast.tp.connection'
+        const NS_HEARTBEAT = 'urn:x-cast:com.google.cast.tp.heartbeat'
+        const NS_RECEIVER  = 'urn:x-cast:com.google.cast.receiver'
+        const NS_MEDIA     = 'urn:x-cast:com.google.cast.media'
+
+        const conn = client.createChannel('sender-0', 'receiver-0', NS_CONNECT, 'JSON')
+        const hb   = client.createChannel('sender-0', 'receiver-0', NS_HEARTBEAT, 'JSON')
+        const rcv  = client.createChannel('sender-0', 'receiver-0', NS_RECEIVER, 'JSON')
+
+        conn.send({ type: 'CONNECT' })
+
+        const pingTimer = setInterval(() => { try { hb.send({ type: 'PING' }) } catch {} }, 5000)
+        hb.on('message', () => {})
+
+        client.on('error', (err) => {
+          clearInterval(pingTimer)
+          activeCast = null
+          fail(err?.message || 'Cast connection error')
+        })
+
+        reqId = 1
+        rcv.send({ type: 'LAUNCH', appId: 'CC1AD845', requestId: reqId++ })
+
+        let launched = false
+        rcv.on('message', (data) => {
+          if (launched || data.type !== 'RECEIVER_STATUS') return
+          const appInfo = data.status?.applications?.[0]
+          if (!appInfo?.transportId) return
+          launched = true
+          clearInterval(pingTimer)
+
+          const tid = appInfo.transportId
+          const mc  = client.createChannel('sender-0', tid, NS_CONNECT, 'JSON')
+          const med = client.createChannel('sender-0', tid, NS_MEDIA, 'JSON')
+          medChannel = med
+
+          mc.send({ type: 'CONNECT' })
+          med.send({
+            type: 'LOAD',
+            requestId: reqId++,
+            media: {
+              contentId: streamUrl,
+              contentType: 'audio/mpeg',
+              streamType: 'LIVE',
+              metadata: {
+                metadataType: 3,
+                title:       stationName || 'Radio',
+                albumName:   'Music App',
+                artist:      currentSong || 'Transmisja na żywo',
+                images:      stationArt ? [{ url: stationArt }] : [],
+              },
+            },
+            autoplay: true,
+          })
+
+          med.on('message', (mdata) => {
+            if (mdata.type !== 'MEDIA_STATUS') return
+            const st = (mdata.status || [])[0]
+            if (st?.playerState === 'PLAYING' || st?.playerState === 'BUFFERING') {
+              finish({ ok: true })
+            }
+          })
+
+          // Resolve after 6s regardless — stream likely playing
+          setTimeout(() => finish({ ok: true }), 6000)
+        })
+      })
+    })
+  })
+
+  // Updates "Now Playing" metadata on the TV without full reconnect
+  ipcMain.handle('tv:update-meta', (_e, { streamUrl, stationName, stationArt, currentSong }) => {
+    if (!activeCast) return { ok: false, reason: 'no_session' }
+    try {
+      activeCast.med.send({
+        type: 'LOAD',
+        requestId: activeCast.reqId++,
+        media: {
+          contentId: streamUrl,
+          contentType: 'audio/mpeg',
+          streamType: 'LIVE',
+          metadata: {
+            metadataType: 3,
+            title:       stationName || 'Radio',
+            albumName:   'Music App',
+            artist:      currentSong || 'Transmisja na żywo',
+            images:      stationArt ? [{ url: stationArt }] : [],
+          },
+        },
+        autoplay: true,
+      })
+      return { ok: true }
+    } catch (e) {
+      activeCast = null
+      return { ok: false, reason: e?.message }
+    }
+  })
+})()
+

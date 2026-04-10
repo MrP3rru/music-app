@@ -1,0 +1,19 @@
+[build]
+  command       = "npm run build:radio"
+  publish       = "dist-radio"
+  node_bundler  = "esbuild"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+# Przekieruj / → /radio.html (strona główna = radio)
+[[redirects]]
+  from   = "/"
+  to     = "/radio.html"
+  status = 200
+
+# Fallback dla pozostałych ścieżek (PWA router)
+[[redirects]]
+  from   = "/*"
+  to     = "/radio.html"
+  status = 200

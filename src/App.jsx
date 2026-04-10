@@ -14,6 +14,7 @@ import { GameLobby } from './GameLobby'
 import { MonopolyGame } from './MonopolyGame'
 import { LyricsOverlay } from './LyricsOverlay'
 import DevDiagnosticsOverlay from './DevDiagnosticsOverlay'
+import TvCastPanel from './TvCastPanel'
 import './App.css'
 
 const genres = [
@@ -1315,6 +1316,7 @@ function App() {
   const [radioNowPlayingAt, setRadioNowPlayingAt] = useState(null)
   const [radioPlayHistory, setRadioPlayHistory] = useState([])
   const prevRadioNowPlayingRef = useRef('')
+  const radioNowPlayingRef     = useRef('')
   const [trackDuration, setTrackDuration] = useState(0)
   const [trackTime, setTrackTime] = useState(0)
   const [discordTrackSyncNonce, setDiscordTrackSyncNonce] = useState(0)
@@ -1324,6 +1326,10 @@ function App() {
   const [isSeeking, setIsSeeking] = useState(false)
   const isSeekingRef = useRef(false)
   const [sessionModalOpen, setSessionModalOpen] = useState(false)
+  const [tvCastOpen, setTvCastOpen] = useState(false)
+  const [tvActiveDevice, setTvActiveDevice] = useState(null)
+  const tvActiveDeviceRef = useRef(null)
+  const tvLastCastKeyRef  = useRef('')
   const [joinCodeInput, setJoinCodeInput] = useState('')
   const [myNickname, setMyNickname] = useState(() => localStorage.getItem('together-nickname') || '')
   const [sessionToast, setSessionToast] = useState('')
@@ -2978,6 +2984,52 @@ function App() {
     }
   }, [currentRadioStreamUrl, currentStation?.id, currentStation?.lastSong, mode])
 
+  // Auto-recast to active TV when station / stream changes
+  useEffect(() => {
+    const dev = tvActiveDeviceRef.current
+    if (!dev || !currentRadioStreamUrl || !currentStation) return
+    const key = `${currentRadioStreamUrl}|${currentStation.id}`
+    if (key === tvLastCastKeyRef.current) return
+    tvLastCastKeyRef.current = key
+    const t = setTimeout(() => {
+      window.playerBridge?.tvCast?.({
+        ip:          dev.ip,
+        port:        dev.port,
+        streamUrl:   currentRadioStreamUrl,
+        stationName: currentStation.name,
+        stationArt:  currentStation.favicon || '',
+        currentSong: radioNowPlayingRef.current || '',  // ref = always fresh
+      }).catch?.(() => {})
+    }, 700)
+    return () => clearTimeout(t)
+  }, [currentRadioStreamUrl, currentStation?.id])
+
+  // Keep radioNowPlayingRef in sync so auto-recast stale closure has current value
+  useEffect(() => { radioNowPlayingRef.current = radioNowPlaying }, [radioNowPlaying])
+
+  // Update "Now Playing" metadata on the TV when the song title changes
+  // Uses the lighter tv:update-meta (no reconnect); falls back to full recast on failure
+  useEffect(() => {
+    if (!tvActiveDeviceRef.current || !radioNowPlaying || !currentRadioStreamUrl || !currentStation) return
+    const dev = tvActiveDeviceRef.current
+    const t = setTimeout(async () => {
+      const opts = {
+        streamUrl:   currentRadioStreamUrl,
+        stationName: currentStation.name,
+        stationArt:  currentStation.favicon || '',
+        currentSong: radioNowPlaying,
+      }
+      try {
+        const result = await window.playerBridge?.tvUpdateMeta?.(opts)
+        if (!result?.ok) {
+          // Session expired — do a full recast
+          window.playerBridge?.tvCast?.({ ip: dev.ip, port: dev.port, ...opts }).catch?.(() => {})
+        }
+      } catch { /* silent */ }
+    }, 2500)
+    return () => clearTimeout(t)
+  }, [radioNowPlaying])
+
   useEffect(() => {
     if (!radioNowPlaying) {
       prevRadioNowPlayingRef.current = ''
@@ -4146,6 +4198,19 @@ function App() {
 
   return (
     <>
+    <TvCastPanel
+      isOpen={tvCastOpen}
+      onClose={() => setTvCastOpen(false)}
+      currentStation={currentStation}
+      currentStreamUrl={currentRadioStreamUrl}
+      radioNowPlaying={radioNowPlaying}
+      tvActiveDevice={tvActiveDevice}
+      onCastSuccess={(device) => {
+        tvActiveDeviceRef.current = device
+        tvLastCastKeyRef.current  = `${currentRadioStreamUrl}|${currentStation?.id ?? ''}`
+        setTvActiveDevice(device)
+      }}
+    />
     {devPanelOpen && (
       <DevDiagnosticsOverlay
         snapshot={devSnapshot}
@@ -4312,6 +4377,13 @@ function App() {
               onClick={() => gameState === 'playing' ? setMonopolyOpen(true) : setGameLobbyOpen(v => !v)}
               title="Monopoly"
             >🎲</button>
+          )}
+          {window.playerBridge && (
+            <button
+              className={`together-btn${tvActiveDevice ? ' casting' : tvCastOpen ? ' active' : ''}`}
+              onClick={() => setTvCastOpen(v => !v)}
+              title={tvActiveDevice ? `Na żywo: ${tvActiveDevice.name}` : 'Otwórz Radio na TV'}
+            >📺{tvActiveDevice && <span className="together-count casting-dot">●</span>}</button>
           )}
         </div>
       </header>
