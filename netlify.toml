@@ -17,7 +17,8 @@
 [[redirects]]
   from   = "/"
   to     = "/radio.html"
-  status = 200
+  status = 302
+  force  = true
 
 # Fallback dla pozostałych ścieżek (PWA router)
 [[redirects]]
