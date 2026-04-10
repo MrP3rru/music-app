@@ -8,34 +8,23 @@ function _s(id, name, tags, bitrate, urls, favicon = '') {
   return { id: `pw-${id}`, name, tags, bitrate, favicon, votes: 9999, streamCandidates: [...urls], url: urls[0] }
 }
 
-// NOTE: All URLs verified HTTPS-only (tested 2026-04-10)
-const CDN = 'https://n-4-6.dcs.redcdn.pl/sc/o2' // Eurozet CDN
+// NOTE: All URLs verified HTTPS with audio/mpeg or audio/aacp Content-Type (2026-04-10)
+// ⚠ Servers using SHOUTcast v1 return Content-Type: text/html — Chrome ORB blocks these for <audio>
+// Only use streams that return audio/* Content-Type
 const CURATED = [
   // ─── Główne ───────────────────────────────────────────────────────────────
-  _s('rmffm',      'RMF FM',                  'pop,hits,polskie',   128, ['https://rs9-krk2.rmfstream.pl/RMFFM48','https://rs6-krk2.rmfstream.pl/RMFFM48'], 'https://www.rmf.fm/favicon.ico'),
-  _s('radiozet',   'Radio ZET',               'pop,hits,polskie',   128, [`${CDN}/Eurozet/live/audio.livx`], 'https://www.radiozet.pl/favicon.ico'),
-  _s('vibefm',     'Vibe FM',                 'dance,electronic,hits,polskie', 128, [`${CDN}/Eurozet/live/vibefm.livx`], 'https://www.vibefm.pl/favicon.ico'),
-  _s('meloradio',  'Meloradio',               'pop,ballads,polskie', 128, [`${CDN}/Eurozet/live/meloradio.livx`], ''),
-  _s('antyradio',  'Antyradio',               'rock,polskie',        128, [`${CDN}/Eurozet/live/antyradio.livx`], 'https://www.antyradio.pl/favicon.ico'),
-  _s('voxfm',      'VOX FM',                  'pop,polskie',         128, [`${CDN}/Eurozet/live/voxfm.livx`], ''),
-  _s('tokfm',      'TOK FM',                  'news,talk,polskie',   128, ['https://tok.fm/radio/stream'], 'https://www.tokfm.pl/favicon.ico'),
+  _s('rmffm',      'RMF FM',                  'pop,hits,polskie',   128, ['https://rs9-krk2.rmfstream.pl/RMFFM48','https://rs202-krk.rmfstream.pl/rmf_fm'], 'https://www.rmf.fm/favicon.ico'),
+  _s('radiozet',   'Radio ZET',               'pop,hits,polskie',   128, ['https://zt01.cdn.eurozet.pl/zet-net.mp3'], 'https://www.radiozet.pl/favicon.ico'),
+  _s('vibefm',     'Vibe FM',                 'dance,electronic,hits,polskie', 128, ['https://ic2.smcdn.pl/6490-1.aac','https://ic1.smcdn.pl/6490-1.aac'], 'https://www.vibefm.pl/favicon.ico'),
+  _s('meloradio',  'Meloradio',               'pop,ballads,polskie', 128, ['https://ml02.cdn.eurozet.pl/mel-wro.mp3','https://ml.cdn.eurozet.pl/mel-net.mp3'], ''),
+  _s('antyradio',  'Antyradio',               'rock,polskie',        128, ['https://an03.cdn.eurozet.pl/ant-waw.mp3','https://an01.cdn.eurozet.pl/ant-waw.mp3'], 'https://www.antyradio.pl/favicon.ico'),
+  _s('voxfm',      'VOX FM',                  'pop,polskie',         128, ['https://ic2.smcdn.pl/3990-1.mp3','https://ic1.smukan.pl/3990-1.mp3'], ''),
+  _s('tokfm',      'TOK FM',                  'news,talk,polskie',   128, ['https://radiostream.pl/tuba10-1.mp3'], 'https://www.tokfm.pl/favicon.ico'),
   _s('radio357',   'Radio 357',               'pop,rock,polskie',    128, ['https://stream.radio357.pl'], ''),
-  _s('chillizet',  'Chilli ZET',              'pop,hits,polskie',    128, [`${CDN}/Eurozet/live/chillizet.livx`], ''),
-  _s('planetafm',  'Planeta FM',              'dance,clubbing,polskie', 128, [`${CDN}/Eurozet/live/planetafm.livx`], ''),
-  // ─── Eurozet ZET podkanały ─────────────────────────────────────────────────
-  _s('zetgold',    'Zet Gold',                'oldies,polskie',      128, [`${CDN}/Eurozet/live/zetgold.livx`], ''),
-  _s('zetrock',    'Zet Rock',                'rock',                128, [`${CDN}/Eurozet/live/zetrock.livx`], ''),
-  _s('zetdance',   'Zet Dance',               'dance,electronic',    128, [`${CDN}/Eurozet/live/zetdance.livx`], ''),
-  _s('zetpolskie', 'Zet Polskie',             'polskie,pop',         128, [`${CDN}/Eurozet/live/zetpolskie.livx`], ''),
-  _s('zetslow',    'Zet Slow',                'ballads,polskie',     128, [`${CDN}/Eurozet/live/zetslow.livx`], ''),
+  _s('chillizet',  'Chilli ZET',              'pop,hits,polskie',    128, ['https://ch.cdn.eurozet.pl/chi-net.mp3'], ''),
   // ─── RMF podkanały ───────────────────────────────────────────────────────
-  _s('rmfclassic', 'RMF Classic',             'classical',            48, [`${CDN}/Eurozet/live/rmfclassic.livx`], 'https://www.rmfclassic.pl/favicon.ico'),
-  _s('rmfmaxxx',   'RMF MAXXX',              'dance,electronic',     48, ['https://rs101-krk.rmfstream.pl/RMFMAXXX48',`${CDN}/Eurozet/live/rmfmaxxx.livx`], ''),
-  // ─── Polskie Radio (via Eurozet CDN) ───────────────────────────────────────
-  _s('jedynka',    'Polskie Radio Jedynka',   'news,polskie',          96, [`${CDN}/PolskieRadio/live/jedynka.livx`], 'https://www.polskieradio.pl/favicon.ico'),
-  _s('trojka',     'Polskie Radio Trójka',    'rock,polskie',          96, [`${CDN}/PolskieRadio/live/trojka.livx`], 'https://www.polskieradio.pl/favicon.ico'),
-  _s('dwojka',     'Polskie Radio Dwójka',    'classical,polskie',     96, [`${CDN}/PolskieRadio/live/dwojka.livx`], 'https://www.polskieradio.pl/favicon.ico'),
-  _s('czworka',    'Polskie Radio Czwórka',   'pop,polskie',           96, [`${CDN}/PolskieRadio/live/czworka.livx`], 'https://www.polskieradio.pl/favicon.ico'),
+  _s('rmfclassic', 'RMF Classic',             'classical',            48, ['https://rs103-krk-cyfronet.rmfstream.pl/rmf_classic','https://rs9-krk2.rmfstream.pl/rmf_classic'], 'https://www.rmfclassic.pl/favicon.ico'),
+  _s('rmfmaxxx',   'RMF MAXXX',              'dance,electronic',     48, ['https://rs9-krk2-cyfronet.rmfstream.pl/RMFMAXXX48','https://rs101-krk.rmfstream.pl/RMFMAXXX48'], ''),
 ]
 
 const GENRES = [
