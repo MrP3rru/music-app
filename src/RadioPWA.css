@@ -13,8 +13,8 @@
   --radius-pill:   999px;
   --blur:          18px;
 
-  /* Responsive font scale */
-  font-size: clamp(13px, 1.6vw, 18px);
+  /* Stable base typography between phones */
+  font-size: 16px;
 }
 
 *, *::before, *::after {
@@ -38,7 +38,9 @@ html, body, #root {
 /* ─── Shell layout ───────────────────────────────────────────────────────────── */
 .pwa-shell {
   position: relative;
-  width: 100vw;
+  width: 100%;
+  min-height: 100vh;
+  min-height: 100svh;
   height: 100dvh;
   overflow: hidden;
   background:
@@ -402,90 +404,139 @@ html, body, #root {
 
 /* ─── Search bar ─────────────────────────────────────────────────────────────── */
 .pwa-search-bar {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 0 clamp(12px, 2.5vw, 24px) 6px;
+  padding: 6px clamp(10px, 2.2vw, 16px);
+  margin: 0 clamp(12px, 2.5vw, 24px) 6px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 18px;
+  background:
+    linear-gradient(125deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.03) 55%, rgba(255,255,255,0.06) 100%),
+    rgba(8, 16, 30, 0.65);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 6px 18px rgba(0,0,0,0.22);
   flex-shrink: 0;
+  transition: border-color 140ms ease, box-shadow 180ms ease, transform 120ms ease;
+}
+
+.pwa-search-bar:focus-within {
+  border-color: rgba(255, 126, 64, 0.62);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.12),
+    0 0 0 2px rgba(255, 118, 50, 0.18),
+    0 8px 24px rgba(255, 107, 43, 0.16);
 }
 
 .pwa-search-icon {
-  width: 16px;
-  height: 16px;
-  color: rgba(242,245,247,0.35);
+  width: 18px;
+  height: 18px;
+  color: rgba(242,245,247,0.45);
   flex-shrink: 0;
 }
 
 .pwa-search-input {
   flex: 1;
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(255,255,255,0.10);
+  display: block;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.12);
   border-radius: 999px;
   color: var(--text);
   font-size: 16px; /* prevents iOS Safari zoom on focus — must be >= 16px */
-  padding: 6px 14px;
+  padding: 7px 14px;
   outline: none;
-  transition: border-color 120ms, background 120ms;
+  transition: border-color 120ms, background 120ms, box-shadow 120ms;
+  appearance: none;
   -webkit-appearance: none;
   touch-action: manipulation;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  caret-color: var(--text);
+  min-height: 36px;
+  line-height: 22px;
 }
 
 .pwa-search-input::placeholder {
   color: rgba(242,245,247,0.30);
 }
 
+.pwa-search-input-btn {
+  text-align: left;
+  cursor: text;
+}
+
+.pwa-search-input-btn:not(.has-value) {
+  color: rgba(242,245,247,0.30);
+}
+
 .pwa-search-input:focus {
-  border-color: rgba(255,107,43,0.45);
-  background: rgba(255,255,255,0.09);
+  border-color: rgba(255,118,50,0.55);
+  background: rgba(255,255,255,0.10);
+  box-shadow: 0 0 0 2px rgba(255,118,50,0.12);
 }
 
 /* hide browser's native clear "x" in search */
 .pwa-search-input::-webkit-search-cancel-button { -webkit-appearance: none; }
 
 .pwa-search-clear {
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
-  border: none;
-  background: rgba(255,255,255,0.10);
-  color: rgba(242,245,247,0.55);
-  font-size: 0.72rem;
+  border: 1px solid rgba(255,255,255,0.16);
+  background: rgba(255,255,255,0.08);
+  color: rgba(242,245,247,0.70);
+  font-size: 0.74rem;
   cursor: pointer;
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 120ms, color 120ms;
+  transition: background 120ms, color 120ms, transform 100ms;
 }
 
 .pwa-search-clear:hover {
-  background: rgba(255,107,43,0.25);
-  color: #ffb05c;
+  background: rgba(255,107,43,0.22);
+  color: #ffd0a2;
+}
+
+.pwa-search-clear:active {
+  transform: scale(0.92);
+}
+
+.pwa-search-clear.left {
+  order: -2;
 }
 
 /* ─── Filter button ─────────────────────────────────────────────────────────── */
 .pwa-filter-btn {
   position: relative;
-  width: 36px;
-  height: 36px;
+  width: 34px;
+  height: 34px;
   border-radius: 50%;
-  border: 1px solid rgba(255,255,255,0.12);
-  background: rgba(255,255,255,0.06);
-  color: rgba(242,245,247,0.60);
+  border: 1px solid rgba(255,255,255,0.15);
+  background: rgba(255,255,255,0.08);
+  color: rgba(242,245,247,0.72);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  transition: background 120ms, border-color 120ms, color 120ms;
+  transition: background 120ms, border-color 120ms, color 120ms, transform 100ms;
 }
 
 .pwa-filter-btn svg { width: 17px; height: 17px; }
 
 .pwa-filter-btn:hover, .pwa-filter-btn:focus-visible {
-  background: rgba(255,255,255,0.10);
+  background: rgba(255,255,255,0.14);
   color: rgba(242,245,247,0.90);
   outline: none;
+}
+
+.pwa-filter-btn:active {
+  transform: scale(0.93);
 }
 
 .pwa-filter-btn.has-active {
@@ -509,6 +560,135 @@ html, body, #root {
   align-items: center;
   justify-content: center;
   pointer-events: none;
+}
+
+/* ─── iOS custom search modal ─────────────────────────────────────────────── */
+.pwa-search-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 260;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(2, 6, 14, 0.62);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 140ms ease;
+}
+
+.pwa-search-modal-overlay.open {
+  opacity: 1;
+  pointer-events: auto;
+  animation: fade-in 0.16s ease;
+}
+
+.pwa-search-modal {
+  width: min(460px, 100%);
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background:
+    linear-gradient(150deg, rgba(255,255,255,0.11) 0%, rgba(255,255,255,0.03) 48%, rgba(255,255,255,0.08) 100%),
+    rgba(8, 18, 34, 0.95);
+  box-shadow: 0 20px 46px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.10);
+  padding: 16px;
+  animation: modal-pop 0.18s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@keyframes modal-pop {
+  from { transform: translateY(10px) scale(0.98); opacity: 0; }
+  to { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+.pwa-search-modal-title {
+  font-size: 0.92rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: rgba(242,245,247,0.94);
+  margin-bottom: 10px;
+}
+
+.pwa-search-modal-input {
+  width: 100%;
+  border-radius: 13px;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.08);
+  color: var(--text);
+  font-size: 16px;
+  padding: 10px 12px;
+  outline: none;
+  transition: border-color 120ms, box-shadow 120ms, background 120ms;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.pwa-search-modal-input:focus {
+  border-color: rgba(255, 128, 65, 0.62);
+  background: rgba(255,255,255,0.11);
+  box-shadow: 0 0 0 2px rgba(255, 118, 50, 0.16);
+}
+
+.pwa-search-modal-input::placeholder {
+  color: rgba(242,245,247,0.42);
+}
+
+.pwa-search-modal-actions {
+  margin-top: 12px;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.pwa-search-modal-btn {
+  border: 1px solid rgba(255,255,255,0.16);
+  border-radius: 11px;
+  padding: 9px 14px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 100ms, background 120ms, border-color 120ms, color 120ms;
+}
+
+.pwa-search-modal-btn:active {
+  transform: translateY(1px);
+}
+
+.pwa-search-modal-btn.ghost {
+  background: rgba(255,255,255,0.06);
+  color: rgba(242,245,247,0.78);
+}
+
+.pwa-search-modal-btn.clear {
+  background: rgba(255,255,255,0.05);
+  color: rgba(242,245,247,0.62);
+  margin-right: auto;
+}
+
+.pwa-search-modal-btn.clear:hover,
+.pwa-search-modal-btn.clear:focus-visible {
+  background: rgba(255,255,255,0.10);
+  color: rgba(242,245,247,0.90);
+  outline: none;
+}
+
+.pwa-search-modal-btn.ghost:hover,
+.pwa-search-modal-btn.ghost:focus-visible {
+  background: rgba(255,255,255,0.10);
+  color: rgba(242,245,247,0.94);
+  outline: none;
+}
+
+.pwa-search-modal-btn.solid {
+  border-color: rgba(255, 127, 61, 0.55);
+  background: linear-gradient(145deg, #ff7a38, #ffb060);
+  color: #09111b;
+}
+
+.pwa-search-modal-btn.solid:hover,
+.pwa-search-modal-btn.solid:focus-visible {
+  background: linear-gradient(145deg, #ff8a4a, #ffbf73);
+  outline: none;
 }
 
 /* ─── Filter panel (bottom sheet) ───────────────────────────────────────────── */
@@ -811,7 +991,11 @@ html, body, #root {
   }
 
   .pwa-tabs        { grid-area: tabs; }
-  .pwa-search-bar  { grid-area: search; padding: 0 12px 6px; }
+  .pwa-search-bar  {
+    grid-area: search;
+    margin: 0 12px 6px;
+    padding: 6px 12px;
+  }
   .pwa-station-list {
     grid-area: list;
     padding-right: 12px;

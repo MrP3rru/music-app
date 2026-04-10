@@ -108,6 +108,8 @@ export default function RadioPWA() {
   const [initialLoading, setInitialLoading]   = useState(false)
   const [listScrollTop, setListScrollTop]     = useState(0)
   const [listHeight, setListHeight]           = useState(400)
+  const [showSearchModal, setShowSearchModal] = useState(false)
+  const [searchDraft, setSearchDraft]         = useState('')
 
   const audioRef           = useRef(null)
   const listRef            = useRef(null)
@@ -116,8 +118,65 @@ export default function RadioPWA() {
   const isPlayingRef       = useRef(false)
   const stallTimerRef      = useRef(null)
   const currentSrcRef      = useRef('')
+  const searchInputRef     = useRef(null)
+  const searchModalInputRef = useRef(null)
+  const isIOS              = useMemo(() => {
+    const ua = navigator.userAgent || ''
+    const iDevice = /iPad|iPhone|iPod/.test(ua)
+    const iPadOSDesktopUA = navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1
+    return iDevice || iPadOSDesktopUA
+  }, [])
 
   useEffect(() => { isPlayingRef.current = isPlaying }, [isPlaying])
+
+  const openIOSSearchPrompt = useCallback(() => {
+    setSearchDraft(searchQuery)
+    setShowSearchModal(true)
+    const input = searchModalInputRef.current
+    if (input) {
+      input.focus()
+      const len = searchQuery.length
+      try { input.setSelectionRange(len, len) } catch {}
+    }
+  }, [searchQuery])
+
+  const closeSearchModal = useCallback(() => {
+    setShowSearchModal(false)
+  }, [])
+
+  const applySearchModal = useCallback(() => {
+    const active = document.activeElement
+    if (active && typeof active.blur === 'function') active.blur()
+    setSearchQuery(searchDraft.trim())
+    setShowSearchModal(false)
+  }, [searchDraft])
+
+  const clearSearchInline = useCallback(() => {
+    setSearchQuery('')
+    requestAnimationFrame(() => searchInputRef.current?.focus())
+  }, [])
+
+  const clearSearchModal = useCallback(() => {
+    setSearchDraft('')
+    requestAnimationFrame(() => {
+      const input = searchModalInputRef.current
+      if (!input) return
+      input.focus()
+      try { input.setSelectionRange(0, 0) } catch {}
+    })
+  }, [])
+
+  useEffect(() => {
+    if (!showSearchModal) return
+    const t = requestAnimationFrame(() => {
+      const input = searchModalInputRef.current
+      if (!input) return
+      input.focus()
+      const len = input.value.length
+      try { input.setSelectionRange(len, len) } catch {}
+    })
+    return () => cancelAnimationFrame(t)
+  }, [showSearchModal])
 
   // ─── Audio cleanup on unmount ────────────────────────────────────────────
   useEffect(() => {
@@ -611,27 +670,52 @@ export default function RadioPWA() {
         </section>
 
         {/* Search bar + filter button */}
-        <div className="pwa-search-bar">
+        <div className="pwa-search-bar" role="search">
+          {searchQuery && (
+            <button
+              type="button"
+              className="pwa-search-clear left"
+              onPointerDown={e => e.preventDefault()}
+              onClick={clearSearchInline}
+              aria-label="Wyczyść"
+            >✕</button>
+          )}
           <svg className="pwa-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
           </svg>
-          <input
-            type="text"
-            className="pwa-search-input"
-            placeholder="Szukaj stacji..."
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            aria-label="Szukaj stacji"
-            autoComplete="off"
-            autoCorrect="off"
-            autoCapitalize="off"
-            spellCheck="false"
-            inputMode="search"
-          />
-          {searchQuery && (
-            <button className="pwa-search-clear" onClick={() => setSearchQuery('')} aria-label="Wyczyść">✕</button>
+          {isIOS ? (
+            <button
+              type="button"
+              className={`pwa-search-input pwa-search-input-btn${searchQuery ? ' has-value' : ''}`}
+              onClick={openIOSSearchPrompt}
+              aria-label="Szukaj stacji"
+            >
+              {searchQuery || 'Szukaj stacji...'}
+            </button>
+          ) : (
+            <input
+              ref={searchInputRef}
+              type="text"
+              className="pwa-search-input"
+              placeholder="Szukaj stacji..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  e.currentTarget.blur()
+                }
+              }}
+              aria-label="Szukaj stacji"
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
+              spellCheck={false}
+              inputMode="search"
+            />
           )}
           <button
+            type="button"
             className={`pwa-filter-btn${activeFilters > 0 ? ' has-active' : ''}`}
             onClick={() => setShowFilterPanel(v => !v)}
             aria-label="Filtry"
@@ -769,6 +853,45 @@ export default function RadioPWA() {
             <button className="pwa-filter-close" onClick={() => setShowFilterPanel(false)}>
               Zamknij
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* iOS search modal (replaces system prompt) */}
+      {isIOS && (
+        <div className={`pwa-search-modal-overlay${showSearchModal ? ' open' : ''}`} onClick={closeSearchModal} aria-hidden={!showSearchModal}>
+          <div className="pwa-search-modal" onClick={e => e.stopPropagation()}>
+            <p className="pwa-search-modal-title">Szukaj stacji</p>
+            <input
+              ref={searchModalInputRef}
+              type="text"
+              className="pwa-search-modal-input"
+              value={searchDraft}
+              onChange={e => setSearchDraft(e.target.value)}
+              placeholder="Np. Vibe, RMF, ZET"
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
+              spellCheck={false}
+              inputMode="search"
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  applySearchModal()
+                }
+                if (e.key === 'Escape') closeSearchModal()
+              }}
+            />
+            <div className="pwa-search-modal-actions">
+              <button
+                type="button"
+                className="pwa-search-modal-btn clear"
+                onPointerDown={e => e.preventDefault()}
+                onClick={clearSearchModal}
+              >Clear</button>
+              <button type="button" className="pwa-search-modal-btn ghost" onClick={closeSearchModal}>Anuluj</button>
+              <button type="button" className="pwa-search-modal-btn solid" onClick={applySearchModal}>Szukaj</button>
+            </div>
           </div>
         </div>
       )}

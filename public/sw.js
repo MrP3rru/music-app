@@ -47,7 +47,10 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       fetch(request)
         .then((res) => {
-          if (res.ok) caches.open(CACHE).then((c) => c.put(request, res.clone()))
+          if (res.ok) {
+            const responseForCache = res.clone()
+            caches.open(CACHE).then((c) => c.put(request, responseForCache))
+          }
           return res
         })
         .catch(() => caches.match(request))
@@ -59,7 +62,8 @@ self.addEventListener('fetch', (event) => {
         if (cached) return cached
         return fetch(request).then((res) => {
           if (res.ok && CACHEABLE.test(url.pathname)) {
-            caches.open(CACHE).then((c) => c.put(request, res.clone()))
+            const responseForCache = res.clone()
+            caches.open(CACHE).then((c) => c.put(request, responseForCache))
           }
           return res
         })
