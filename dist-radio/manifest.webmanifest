@@ -1,0 +1,34 @@
+{
+  "name": "Music Radio",
+  "short_name": "Radio",
+  "description": "Streamuj radio online — telewizor, telefon, przeglądarka.",
+  "start_url": "/radio.html",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#060e1a",
+  "theme_color": "#060e1a",
+  "lang": "pl",
+  "categories": ["music", "entertainment"],
+  "icons": [
+    {
+      "src": "/branding/appicon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "Otwórz radio",
+      "url": "/radio.html",
+      "icons": [{ "src": "/favicon.svg", "sizes": "any" }]
+    }
+  ]
+}
