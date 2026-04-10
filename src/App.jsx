@@ -139,9 +139,40 @@ const radioApiBases = [
 
 const radioSearchEndpoint = '/json/stations/search'
 
+function sanitizeRuntimeUrl(url) {
+  if (!url || typeof url !== 'string') return ''
+
+  try {
+    const base = typeof window !== 'undefined' ? window.location.href : 'https://example.invalid/'
+    const parsed = new URL(url, base)
+    if (!/^https?:$/i.test(parsed.protocol)) return ''
+    if (typeof window !== 'undefined' && window.location.protocol === 'https:' && parsed.protocol !== 'https:') {
+      return ''
+    }
+    return parsed.toString()
+  } catch {
+    return ''
+  }
+}
+
 // Ręcznie zweryfikowane polskie stacje z działającymi streamami
 function _pl(id, name, tags, bitrate, urls, favicon = '', homepage = '', votes = 5000) {
-  return { id: `curated-${id}`, name, countryCode: 'PL', country: 'Poland', codec: 'MP3', bitrate, tags, favicon, homepage, votes, lastSong: '', streamCandidates: urls, url: urls[0] }
+  const streamCandidates = urls.map(sanitizeRuntimeUrl).filter(Boolean)
+  return {
+    id: `curated-${id}`,
+    name,
+    countryCode: 'PL',
+    country: 'Poland',
+    codec: 'MP3',
+    bitrate,
+    tags,
+    favicon: sanitizeRuntimeUrl(favicon),
+    homepage: sanitizeRuntimeUrl(homepage),
+    votes,
+    lastSong: '',
+    streamCandidates,
+    url: streamCandidates[0] || '',
+  }
 }
 const CURATED_PL_STATIONS = [
   // --- Główne ---
@@ -212,7 +243,7 @@ const CURATED_PL_STATIONS = [
   _pl('radiogdansk',    'Radio Gdańsk',          'polskie,regional',   96, ['http://stream.task.gda.pl:8443/rg1'], '', '', 4800),
   _pl('radiopoznan',    'Radio Poznań',          'polskie,regional',   96, ['http://stream4.nadaje.com:8579/poznan'], '', '', 4700),
   _pl('radiokampus',    'Radio Kampus',          'polskie,alternative',96, ['http://193.0.98.66:8002/'], '', '', 4600),
-]
+].filter((station) => station.streamCandidates.length > 0)
 const failedImageUrls = new Set()
 const MIX_PATTERN = /\b(mix|mixtape|megamix|nonstop|non[ -]stop)\b/i
 const LIVE_PATTERN = /\b(live|concert|show)\b/i
@@ -423,8 +454,15 @@ function loadStoredFavorites() {
 
 function normalizeStation(station) {
   const streamCandidates = dedupeById(
-    [station.urlResolved, station.url, station.url_resolved, station.url].filter(Boolean).map((url) => ({ id: url, url })),
+    [station.urlResolved, station.url, station.url_resolved, station.url]
+      .map(sanitizeRuntimeUrl)
+      .filter(Boolean)
+      .map((url) => ({ id: url, url })),
   ).map((entry) => entry.url)
+
+  if (streamCandidates.length === 0) {
+    return null
+  }
 
   return {
     id: station.stationuuid,
@@ -435,10 +473,10 @@ function normalizeStation(station) {
     codec: station.codec,
     bitrate: station.bitrate,
     tags: station.tags,
-    homepage: station.homepage,
-    url: station.urlResolved || station.url,
+    homepage: sanitizeRuntimeUrl(station.homepage),
+    url: streamCandidates[0],
     streamCandidates,
-    favicon: station.favicon,
+    favicon: sanitizeRuntimeUrl(station.favicon),
     lastSong: station.lastsong || '',
   }
 }
@@ -784,9 +822,10 @@ function getPlaceholderArt(label, type) {
 }
 
 function sanitizeImageUrl(url) {
-  if (!url) return ''
+  const safeUrl = sanitizeRuntimeUrl(url)
+  if (!safeUrl) return ''
   try {
-    const u = new URL(url)
+    const u = new URL(safeUrl)
     const host = u.hostname.toLowerCase()
     const path = u.pathname.toLowerCase()
     // Znane źródła generujące duży szum 404/403/412/429.
@@ -798,7 +837,7 @@ function sanitizeImageUrl(url) {
     if (host.includes('radiofrance.fr') && path.includes('favicon')) return ''
     if (host.includes('lesonunique.com') && path.includes('/images_flux/logos/')) return ''
     if (path.endsWith('/apple-touch-icon.png')) return ''
-    return url
+    return safeUrl
   } catch {
     return ''
   }
@@ -2528,7 +2567,7 @@ function App() {
         const params = { name: fullQuery, limit: '80', hidebroken: 'false', order: 'clickcount', reverse: 'true' }
         if (rgCountry) params.countrycode = rgCountry
         const raw = await fetchStationsFromMirrors(params)
-        setRgResults(dedupeById(raw.filter(s => s.urlResolved || s.url).map(normalizeStation)))
+        setRgResults(dedupeById(raw.filter(s => s.urlResolved || s.url).map(normalizeStation).filter(Boolean)))
       } catch { setRgResults([]) }
       finally { setRgLoading(false) }
     }, 400)
@@ -2578,7 +2617,8 @@ function App() {
           responses
             .flat()
             .filter((station) => station.urlResolved || station.url)
-            .map(normalizeStation),
+            .map(normalizeStation)
+            .filter(Boolean),
         )).slice(0, 220)
 
         if (!ignore) {
@@ -2652,7 +2692,8 @@ function App() {
         const fromApi = dedupeStations(dedupeById(
           boostedResponse
             .filter((station) => station.urlResolved || station.url)
-            .map(normalizeStation),
+            .map(normalizeStation)
+            .filter(Boolean),
         ))
 
         const curated = countryFilter === 'PL' ? CURATED_PL_STATIONS : []

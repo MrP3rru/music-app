@@ -71,6 +71,11 @@ async function fetchFromApi(base, tagList, limit = 40, country = '') {
   return r.json()
 }
 
+function sanitizeStationImageUrl(url) {
+  if (!url || typeof url !== 'string') return ''
+  return url.startsWith('https://') ? url : ''
+}
+
 // ─── Pulsing idle bars (CSS-driven, shown when viz not connected) ─────────────
 const IDLE_BARS = Array.from({ length: 40 }, (_, i) => {
   const t = i / 39
@@ -215,7 +220,13 @@ export default function RadioPWA() {
     const cached = localStorage.getItem(CACHE_KEY)
     const ts     = Number(localStorage.getItem(CACHE_TS) || 0)
     if (cached && Date.now() - ts < 7 * 86400000) {
-      try { setExtraStations(JSON.parse(cached)); return } catch {}
+      try {
+        setExtraStations(JSON.parse(cached).map((station) => ({
+          ...station,
+          favicon: sanitizeStationImageUrl(station.favicon),
+        })))
+        return
+      } catch {}
     }
     setInitialLoading(true)
     ;(async () => {
@@ -237,7 +248,7 @@ export default function RadioPWA() {
               name: s.name,
               tags: s.tags,
               countrycode: 'PL',
-              favicon: s.favicon || '',
+              favicon: sanitizeStationImageUrl(s.favicon),
               votes: Number(s.votes) || 0,
               streamCandidates: [s.url_resolved, s.url].filter(u => u?.startsWith('https://')),
               url: s.url_resolved || s.url,
@@ -458,7 +469,7 @@ export default function RadioPWA() {
               name: s.name,
               tags: s.tags,
               countrycode: (s.countrycode || '').toUpperCase(),
-              favicon: s.favicon || '',
+              favicon: sanitizeStationImageUrl(s.favicon),
               votes: Number(s.votes) || 0,
               streamCandidates: [s.url_resolved, s.url].filter(u => u?.startsWith('https://')),
               url: s.url_resolved || s.url,
@@ -508,7 +519,7 @@ export default function RadioPWA() {
             .map(s => ({
               id: s.stationuuid, name: s.name, tags: s.tags,
               countrycode: (s.countrycode || '').toUpperCase(),
-              favicon: s.favicon || '', votes: Number(s.votes) || 0,
+              favicon: sanitizeStationImageUrl(s.favicon), votes: Number(s.votes) || 0,
               streamCandidates: [s.url_resolved, s.url].filter(u => u?.startsWith('https://')),
               url: s.url_resolved || s.url,
             }))
