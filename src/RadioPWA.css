@@ -194,7 +194,7 @@ html, body, #root {
 .pwa-buffering-ring {
   position: absolute;
   inset: -4px;
-  border-radius: 18px;
+  border-radius: 50%;
   border: 2px solid transparent;
   border-top-color: var(--accent);
   border-right-color: var(--accent-light);

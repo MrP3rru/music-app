@@ -100,12 +100,12 @@ export default function RadioPWA() {
   const [currentStation, setCurrentStation] = useState(null)
   const [isPlaying, setIsPlaying] = useState(false)
   const [isBuffering, setIsBuffering] = useState(false)
-  const [genreId, setGenreId] = useState('all')
+  const [genreId, setGenreId] = useState('pop')
   const [nowPlaying, setNowPlaying] = useState('')
   const [streamIdx, setStreamIdx] = useState(0)
   const [loadingApi, setLoadingApi] = useState(false)
   const [searchQuery, setSearchQuery]     = useState('')
-  const [polandOnly, setPolandOnly]       = useState(false)
+  const [polandOnly, setPolandOnly]       = useState(true)
   const [onlineCount, setOnlineCount]     = useState(0)
   const [showFilterPanel, setShowFilterPanel] = useState(false)
 
@@ -121,7 +121,6 @@ export default function RadioPWA() {
   // ─── Audio element (create once) ─────────────────────────────────────────
   useEffect(() => {
     const audio = new Audio()
-    audio.crossOrigin = 'anonymous'
     audio.preload = 'none'
     audio.volume = 1.0
     audioRef.current = audio
@@ -385,13 +384,13 @@ export default function RadioPWA() {
     navigator.mediaSession.setActionHandler('previoustrack', () => goPrev())
   }, [isPlaying, currentStation, nowPlaying, togglePlay, goNext, goPrev])
 
-  // ─── Restore last station on mount ───────────────────────────────────────
+  // ─── Restore last station on mount (default: Vibe FM) ──────────────────
   useEffect(() => {
     const lastId = localStorage.getItem('pwa-radio-last-id')
-    if (lastId) {
-      const found = CURATED.find(s => s.id === lastId)
-      if (found) setCurrentStation(found)
-    }
+    const target = lastId
+      ? CURATED.find(s => s.id === lastId)
+      : CURATED.find(s => s.id === 'pw-vibefm')
+    if (target) setCurrentStation(target)
   }, [])
 
 
